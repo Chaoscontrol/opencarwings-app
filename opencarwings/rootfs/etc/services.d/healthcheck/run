@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "[DEBUG] Starting healthcheck service..." >&2
+python /opt/opencarwings/healthcheck.py 2>&1 || echo "[ERROR] Healthcheck failed to start" >&2
