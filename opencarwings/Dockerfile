@@ -25,7 +25,7 @@ RUN git clone --depth 1 --branch "${UPSTREAM_REF}" \
 
 # Install Python dependencies
 WORKDIR /opt/opencarwings
-RUN pip3 install -r requirements.txt psycopg2-binary
+RUN pip3 install -r requirements.txt psycopg2-binary django-crispy-forms crispy-bootstrap4
 
 # Create directories for data persistence
 RUN mkdir -p /data/postgres /data/redis /data/static /data/media /data/logs
