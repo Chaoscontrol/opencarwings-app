@@ -1,14 +1,15 @@
-name: Upstream Sync
+name: Sync Upstream
 
 on:
   schedule:
-    # Run daily at 2 AM UTC
-    - cron: "0 2 * * *"
+    - cron: "0 3 * * *" # Runs at 3 AM UTC (after version bump)
   workflow_dispatch:
 
 jobs:
-  check-upstream:
+  sync:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -16,77 +17,100 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get latest upstream commit
-        id: upstream
+      - name: Add upstream remote
         run: |
-          UPSTREAM_SHA=$(git ls-remote https://github.com/developerfromjokela/opencarwings.git HEAD | cut -f1)
-          echo "sha=$UPSTREAM_SHA" >> $GITHUB_OUTPUT
+          git remote add upstream https://github.com/developerfromjokela/opencarwings.git || true
+          git fetch upstream main
 
-      - name: Check if upstream changed
-        id: check
+      - name: Check for upstream changes
+        id: check_upstream
         run: |
-          CURRENT_SHA=$(grep -oP '(?<=UPSTREAM_REF=)[^"]*' opencarwings/Dockerfile || echo "main")
-          if [ "$CURRENT_SHA" != "${{ steps.upstream.outputs.sha }}" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "new_sha=${{ steps.upstream.outputs.sha }}" >> $GITHUB_OUTPUT
+          # Get the last commit we synced (stored in a marker file)
+          if [ -f ".upstream_sync" ]; then
+            LAST_SYNC=$(cat .upstream_sync)
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
+            LAST_SYNC=""
           fi
 
-      - name: Update Dockerfile with new upstream SHA
-        if: steps.check.outputs.changed == 'true'
-        run: |
-          sed -i "s/ARG UPSTREAM_REF=.*/ARG UPSTREAM_REF=${{ steps.check.outputs.new_sha }}/" opencarwings/Dockerfile
+          # Get latest upstream commit
+          LATEST_UPSTREAM=$(git rev-parse upstream/main)
 
-      - name: Generate changelog
-        if: steps.check.outputs.changed == 'true'
-        run: |
-          # Get commit messages since last update
-          LAST_SHA=$(git log --oneline -1 --grep="chore: update upstream" --format="%H" || echo "")
-          if [ -n "$LAST_SHA" ]; then
-            git log --oneline --pretty=format:"%s" "$LAST_SHA"..HEAD | head -20 > changelog.tmp
+          if [ "$LAST_SYNC" = "$LATEST_UPSTREAM" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No new upstream changes"
           else
-            echo "Initial upstream sync" > changelog.tmp
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "last_sync=$LAST_SYNC" >> $GITHUB_OUTPUT
+            echo "latest_upstream=$LATEST_UPSTREAM" >> $GITHUB_OUTPUT
+            echo "New upstream changes detected"
           fi
 
-          # Update CHANGELOG.md
+      - name: Generate upstream changelog
+        if: steps.check_upstream.outputs.has_changes == 'true'
+        run: |
+          LAST_SYNC="${{ steps.check_upstream.outputs.last_sync }}"
+
           {
-            echo "# Changelog"
+            echo "### Upstream changes synced on $(date +%Y-%m-%d)"
             echo ""
-            echo "## $(date +%Y-%m-%d) - Upstream Update"
+            if [ -z "$LAST_SYNC" ]; then
+              echo "Initial sync with upstream repository"
+              git log upstream/main --pretty=format:"- %s (%h)" -20  # Last 20 commits
+            else
+              git log ${LAST_SYNC}..upstream/main --pretty=format:"- %s (%h)"
+            fi
             echo ""
-            cat changelog.tmp
             echo ""
-            echo "---"
-            echo ""
-            cat opencarwings/CHANGELOG.md 2>/dev/null || echo ""
-          } > opencarwings/CHANGELOG.md
+          } > upstream_changes.md
 
-      - name: Bump version
-        if: steps.check.outputs.changed == 'true'
+          # Append to CHANGELOG.md
+          if [ -f "opencarwings/CHANGELOG.md" ]; then
+            # Insert after the first version header
+            sed -i '/^## v/r upstream_changes.md' opencarwings/CHANGELOG.md
+          else
+            echo "# Changelog" > opencarwings/CHANGELOG.md
+            echo "" >> opencarwings/CHANGELOG.md
+            cat upstream_changes.md >> opencarwings/CHANGELOG.md
+          fi
+
+      - name: Merge upstream changes
+        if: steps.check_upstream.outputs.has_changes == 'true'
         run: |
-          CURRENT_VERSION=$(grep -oP '(?<=version: ")[^"]*' opencarwings/config.yaml)
-          # Simple version bump (increment patch)
-          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
-          NEW_VERSION="$major.$minor.$((patch + 1))"
-          sed -i "s/version: \"$CURRENT_VERSION\"/version: \"$NEW_VERSION\"/" opencarwings/config.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit changes
-        if: steps.check.outputs.changed == 'true'
+          # Try to merge upstream/main
+          if git merge upstream/main --no-edit -m "Sync with upstream"; then
+            echo "Merge successful"
+          else
+            echo "Merge conflict detected - manual resolution required"
+            git merge --abort
+            exit 1
+          fi
+
+      - name: Update sync marker
+        if: steps.check_upstream.outputs.has_changes == 'true'
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add .
-          git commit -m "chore: update upstream to ${{ steps.check.outputs.new_sha }}"
+          LATEST_UPSTREAM="${{ steps.check_upstream.outputs.latest_upstream }}"
+          echo "$LATEST_UPSTREAM" > .upstream_sync
+          git add .upstream_sync
 
-      - name: Push changes
-        if: steps.check.outputs.changed == 'true'
-        uses: ad-m/github-push-action@master
+      - name: Commit and push
+        if: steps.check_upstream.outputs.has_changes == 'true'
+        run: |
+          git add opencarwings/CHANGELOG.md
+          git commit --amend --no-edit
+          git push origin main
+
+      - name: Create issue on merge conflict
+        if: failure()
+        uses: actions/github-script@v7
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Trigger build workflow
-        if: steps.check.outputs.changed == 'true'
-        run: |
-          echo "Build workflow would be triggered here"
-          # In a real setup, this would trigger a separate build workflow
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '⚠️ Upstream sync failed - merge conflict',
+              body: 'The automated upstream sync encountered a merge conflict and requires manual resolution.\n\nPlease manually sync with upstream:\n```bash\ngit remote add upstream https://github.com/developerfromjokela/opencarwings.git\ngit fetch upstream\ngit merge upstream/main\n# Resolve conflicts\ngit push\n```',
+              labels: ['upstream-sync', 'needs-attention']
+            })
