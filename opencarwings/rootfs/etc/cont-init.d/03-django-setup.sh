@@ -122,17 +122,36 @@ TIME_ZONE = os.environ.get('TZ', 'UTC')
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # SMS Providers configuration (required by upstream code)
 SMS_PROVIDERS = {}
+
+# Custom settings required by upstream
+SIGNUP_ENABLED = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EOF
 
     export DJANGO_SETTINGS_MODULE="carwings.settings"
     bashio::log.info "Created basic Django settings"
+fi
+
+# Add static file serving middleware for development
+bashio::log.info "Adding static file serving configuration..."
+if [ -f "carwings/settings.py" ]; then
+    # Add whitenoise for static file serving in production
+    sed -i '/django.middleware.security.SecurityMiddleware/a\    '\''whitenoise.middleware.WhiteNoiseMiddleware'\'',' /opt/opencarwings/carwings/settings.py
+    sed -i '/INSTALLED_APPS = \[/a\    '\''whitenoise.runserver_nostatic'\'',' /opt/opencarwings/carwings/settings.py
+    
+    # Add static file configuration
+    echo "
+# Static files configuration for production
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = True
+" >> /opt/opencarwings/carwings/settings.py
 fi
 
 # Wait for local database to be ready (PostgreSQL should already be running from previous script)
