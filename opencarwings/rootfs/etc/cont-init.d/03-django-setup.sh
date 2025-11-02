@@ -6,7 +6,7 @@ cd /opt/opencarwings
 # Set environment variables from add-on config
 export TZ=$(bashio::config 'timezone' 'UTC')
 export LOG_LEVEL=$(bashio::config 'log_level' 'info')
-export ACTIVATION_SMS_MESSAGE="ACTIVATE"
+export ACTIVATION_SMS_MESSAGE="NISSAN_EVIT_TELEMATICS_CENTER"
 
 # Database configuration - use local PostgreSQL
 export PSQL_DATABASE=carwings
@@ -29,7 +29,34 @@ if [ -f "carwings/settings.docker.py" ]; then
     
     # Modify settings for addon environment
     sed -i "s/ALLOWED_HOSTS = .*/ALLOWED_HOSTS = ['*']/" carwings/settings.py
-    sed -i "s/DEBUG = .*/DEBUG = True/" carwings/settings.py  # Change to False in production
+    
+    # Update DEBUG based on log level
+    if [ "$(bashio::config 'log_level')" = "debug" ]; then
+        sed -i "s/DEBUG = .*/DEBUG = True/" carwings/settings.py
+    else
+        sed -i "s/DEBUG = .*/DEBUG = False/" carwings/settings.py
+    fi
+    
+    # Build CSRF trusted origins list
+    TRUSTED_ORIGINS="['http://homeassistant.local:8124', 'http://localhost:8124', 'http://127.0.0.1:8124'"
+    
+    # Add user's domains if configured (with wildcard for all subdomains)
+    if bashio::config.has_value 'trusted_domains'; then
+        for domain in $(bashio::config 'trusted_domains'); do
+            TRUSTED_ORIGINS="${TRUSTED_ORIGINS}, 'https://*.${domain}', 'http://*.${domain}'"
+            bashio::log.info "Added trusted domain: ${domain}"
+        done
+    fi
+    
+    TRUSTED_ORIGINS="${TRUSTED_ORIGINS}]"
+    
+    # Append CSRF configuration to settings
+    echo "
+# CSRF trusted origins configuration (for web UI security)
+CSRF_TRUSTED_ORIGINS = ${TRUSTED_ORIGINS}
+" >> carwings/settings.py
+    
+    bashio::log.info "CSRF trusted origins configured"
     
     export DJANGO_SETTINGS_MODULE="carwings.settings"
 else

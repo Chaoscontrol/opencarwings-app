@@ -17,8 +17,9 @@ ports_description:
 options:
   timezone: UTC
   log_level: info
-  sms_activation_message: "ACTIVATE"
+  trusted_domains: []
 schema:
   timezone: str?
   log_level: list(trace|debug|info|notice|warning|error|fatal)
-  sms_activation_message: str
+  trusted_domains:
+    - str?
