@@ -1,0 +1,13 @@
+#!/bin/sh
+cd /opt/opencarwings || exit 1
+
+export PSQL_DATABASE=carwings
+export PSQL_USER=carwings_user
+export PSQL_PASSWORD=secure_password
+export PSQL_DATABASE_HOST=localhost
+export PSQL_DATABASE_PORT=5432
+export PYTHONPATH=/opt/opencarwings
+export DJANGO_SETTINGS_MODULE=carwings.settings
+export DEBUG=false
+
+exec python manage.py runserver 0.0.0.0:8124 --noreload
