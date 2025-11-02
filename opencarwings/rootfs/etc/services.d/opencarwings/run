@@ -6,8 +6,11 @@ export PSQL_USER=carwings_user
 export PSQL_PASSWORD=secure_password
 export PSQL_DATABASE_HOST=localhost
 export PSQL_DATABASE_PORT=5432
+export REDIS_HOST=localhost
+export REDIS_PORT=6379
 export PYTHONPATH=/opt/opencarwings
 export DJANGO_SETTINGS_MODULE=carwings.settings
 export DEBUG=true
+export SECRET_KEY=django-insecure-default-key-change-in-production
 
 exec python manage.py runserver 0.0.0.0:8124 --noreload

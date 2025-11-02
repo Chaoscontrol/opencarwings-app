@@ -27,8 +27,12 @@ RUN git clone --depth 1 --branch "${UPSTREAM_REF}" \
 
 # Install Python dependencies
 WORKDIR /opt/opencarwings
-RUN pip3 install -r requirements.txt psycopg2-binary django-crispy-forms crispy-bootstrap4 whitenoise djangorestframework djangorestframework-simplejwt django-bootstrap4
-
+RUN pip3 install -r requirements.txt psycopg2-binary \
+    daphne channels channels-redis \
+    django-crispy-forms crispy-tailwind \
+    whitenoise djangorestframework djangorestframework-simplejwt \
+    django-mathfilters drf-yasg
+    
 # Create directories for data persistence
 RUN mkdir -p /data/postgres /data/redis /data/static /data/media /data/logs
 
