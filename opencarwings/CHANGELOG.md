@@ -1,3 +1,18 @@
+## v0.0.3 - 2025-11-03 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Update time formatting from probe (9480180)
+- Add slideshow to landing page (33643e0)
+- Implement timezone setting for user and make datetimes timezone-aware in probe data (76088dd)
+- Small patches to probe data viewer (bba4f1d)
+- Enable max speed field (b37f238)
+- Correctly implement ABS probe data parsing and other fixes (52ee21c)
+- Fix field (4244d35)
+- Handle timeout wait if last command timed out (330d17a)
+- Change periodic data update order (205c0cd)
+- Fix in Apple maps for new link format (28d3506)
+
 ## v0.0.2 - 2025-11-03
 
 - Updated github workflows for updates and reset versioning
