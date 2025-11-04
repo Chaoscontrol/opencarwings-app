@@ -1,3 +1,8 @@
+## v0.0.3-1 - 2025-11-04 [Addon Patch]
+
+- Changed server to daphne, now it starts the TCU TCP 55230 port and it's listening
+- Repo cleanup, removed s6-overlay
+
 ## v0.0.3 - 2025-11-03 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
