@@ -6,9 +6,9 @@ url: https://github.com/Chaoscontrol/opencarwings-addon
 init: false
 arch:
   - amd64
-host_network: true
-devices:
-  - /dev/net/tun
+# host_network: true
+# devices:
+#   - /dev/net/tun
 ports:
   8124/tcp: 8124
   8125/tcp: 8125
@@ -28,6 +28,6 @@ schema:
     - str?
   tailscale_auth_key: str
   tailscale_funnel_hostname: str
-map:
-  - config:rw
-  - ssl
+# map:
+#   - config:rw
+#   - ssl

@@ -4,8 +4,8 @@ cd /opt/opencarwings || exit 1
 echo "OpenCarwings add-on service starting..."
 
 # --- 1. Load Configuration Variables ---
-TAILSCALE_AUTH_KEY=$(jq --raw-output ".tailscale_auth_key" /data/options.json)
-TAILSCALE_HOSTNAME=$(jq --raw-output ".tailscale_funnel_hostname" /data/options.json)
+# TAILSCALE_AUTH_KEY=$(jq --raw-output ".tailscale_auth_key" /data/options.json)
+# TAILSCALE_HOSTNAME=$(jq --raw-output ".tailscale_funnel_hostname" /data/options.json)
 TCU_PORT=55230
 
 # Set environment variables for Django
@@ -23,49 +23,49 @@ export SECRET_KEY=django-insecure-default-key-change-in-production
 
 # --- 2. Tailscale Funnel Setup ---
 
-if [ -z "$TAILSCALE_AUTH_KEY" ]; then
-    echo "⚠️ WARNING: Tailscale Auth Key is empty. Skipping Funnel setup."
-    echo "The TCU server will only be accessible locally on port ${TCU_PORT}."
-else
-    echo "--- Initiating Tailscale Funnel Setup ---"
+# if [ -z "$TAILSCALE_AUTH_KEY" ]; then
+#     echo "⚠️ WARNING: Tailscale Auth Key is empty. Skipping Funnel setup."
+#     echo "The TCU server will only be accessible locally on port ${TCU_PORT}."
+# else
+#     echo "--- Initiating Tailscale Funnel Setup ---"
     
-    # Start the daemon in the background
-    tailscaled --cleanup --state=/var/lib/tailscale/tailscaled.state &
-    TAILSCALED_PID=$!
+#     # Start the daemon in the background
+#     tailscaled --cleanup --state=/var/lib/tailscale/tailscaled.state &
+#     TAILSCALED_PID=$!
     
-    # Wait a moment for the daemon to initialize
-    sleep 3
+#     # Wait a moment for the daemon to initialize
+#     sleep 3
     
-    # Bring the Tailscale interface up and authenticate
-    echo "Connecting to Tailscale network..."
-    tailscale up \
-        --authkey="${TAILSCALE_AUTH_KEY}" \
-        --hostname="${TAILSCALE_HOSTNAME}" \
-        --accept-routes=false \
-        --accept-dns=false \
-        --reset \
-        --timeout=30s
+#     # Bring the Tailscale interface up and authenticate
+#     echo "Connecting to Tailscale network..."
+#     tailscale up \
+#         --authkey="${TAILSCALE_AUTH_KEY}" \
+#         --hostname="${TAILSCALE_HOSTNAME}" \
+#         --accept-routes=false \
+#         --accept-dns=false \
+#         --reset \
+#         --timeout=30s
         
-    if [ $? -ne 0 ]; then
-        echo "❌ ERROR: Tailscale authentication failed. Check key/permissions."
-    else
-        # Enable Funnel on the fixed Carwings port
-        echo "✅ Tailscale connected. Enabling Funnel on fixed port ${TCU_PORT}..."
-        tailscale funnel --bg tcp "${TCU_PORT}"
+#     if [ $? -ne 0 ]; then
+#         echo "❌ ERROR: Tailscale authentication failed. Check key/permissions."
+#     else
+#         # Enable Funnel on the fixed Carwings port
+#         echo "✅ Tailscale connected. Enabling Funnel on fixed port ${TCU_PORT}..."
+#         tailscale funnel --bg tcp "${TCU_PORT}"
         
-        # Display the Funnel URL for the user
-        sleep 5
-        FUNNEL_URL=$(tailscale status --json | jq -r '.Funnel.URLs[]' | head -n 1)
+#         # Display the Funnel URL for the user
+#         sleep 5
+#         FUNNEL_URL=$(tailscale status --json | jq -r '.Funnel.URLs[]' | head -n 1)
         
-        if [ "$FUNNEL_URL" != "null" ]; then
-            echo "--------------------------------------------------------"
-            echo "🎉 SUCCESS: Use this URL for the TCU: ${FUNNEL_URL}"
-            echo "--------------------------------------------------------"
-        else
-            echo "⚠️ WARNING: Tailscale Funnel enabled, but URL could not be retrieved. Check your Tailscale ACLs."
-        fi
-    fi
-fi
+#         if [ "$FUNNEL_URL" != "null" ]; then
+#             echo "--------------------------------------------------------"
+#             echo "🎉 SUCCESS: Use this URL for the TCU: ${FUNNEL_URL}"
+#             echo "--------------------------------------------------------"
+#         else
+#             echo "⚠️ WARNING: Tailscale Funnel enabled, but URL could not be retrieved. Check your Tailscale ACLs."
+#         fi
+#     fi
+# fi
 
 # --- 3. Start OpenCarwings Server ---
 echo "Starting OpenCarwings server with Daphne..."

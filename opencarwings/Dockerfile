@@ -17,11 +17,11 @@ RUN apk add --no-cache \
     curl \
     libffi-dev \
     openssl-dev \
-   # --- TAILSCALE & UTILITY ADDITIONS ---
-    tailscale \
-    ip6tables \
-    jq \
-    # -------------------------------------
+#    # --- TAILSCALE & UTILITY ADDITIONS ---
+#     tailscale \
+#     ip6tables \
+#     jq \
+#     # -------------------------------------
     && python3 -m pip install --upgrade pip
 
 # Clone OpenCarwings upstream

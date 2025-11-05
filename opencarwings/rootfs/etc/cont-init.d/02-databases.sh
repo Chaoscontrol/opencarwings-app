@@ -1,22 +1,12 @@
 #!/command/with-contenv bashio
 # shellcheck shell=bash
 
-# --- FIX: Ensure the system users exist before attempting chown or gosu ---
-if ! getent passwd postgres > /dev/null; then
-    adduser -S -u 1000 -G users postgres
-fi
-
-if ! getent passwd redis > /dev/null; then
-    adduser -S -u 1001 -G users redis
-fi
-# -------------------------------------------------------------------------
-
 bashio::log.info "=== Starting PostgreSQL and Redis Setup ==="
 
 # Create PostgreSQL directories and set permissions
 bashio::log.info "Creating PostgreSQL directories..."
 mkdir -p /data/postgres /run/postgresql
-chown -R postgres:users /data/postgres /run/postgresql
+chown -R postgres:postgres /data/postgres /run/postgresql
 chmod 700 /data/postgres
 bashio::log.info "PostgreSQL directories created and permissions set"
 
@@ -52,11 +42,11 @@ log_filename = 'postgresql.log'
 EOF
 
 # Create pg_hba.conf for local connections
-bashio::log.info "Creating PostgreSQL authentication configuration (using md5 password check)..."
+bashio::log.info "Creating PostgreSQL authentication configuration..."
 cat > /data/postgres/pg_hba.conf << 'EOF'
-local all all md5
-host all all 127.0.0.1/32 md5
-host all all ::1/128 md5
+local all all trust
+host all all 127.0.0.1/32 trust
+host all all ::1/128 trust
 EOF
 
 # Start PostgreSQL
