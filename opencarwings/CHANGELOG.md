@@ -1,3 +1,15 @@
+## v0.0.4 - 2025-11-24 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Add carrier and signal level to list API (cd3bd9f)
+- Revert weather channel background to maintain nice compression (2b43197)
+- Small patch to probe crm charges longitude field (45594b5)
+- Another attempt at fixing weather icons (b200e99)
+- Fix MSN data length (5692b3f)
+- More fixes to probe parsing (5b8975e)
+- Bugfixes: Probe CRM MSN and Charge fields, Charge Point remove debug log and weather channel fix snow icon (79fdd9f)
+
 ## v0.0.3-1 - 2025-11-04 [Addon Patch]
 
 - Changed server to daphne, now it starts the TCU TCP 55230 port and it's listening
