@@ -1,3 +1,10 @@
+## v0.0.5 - 2025-11-25 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Visualize heading of ABS events (50ca825)
+- Fix few fields on probe energy info (8ff74f0)
+
 ## v0.0.4 - 2025-11-24 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
