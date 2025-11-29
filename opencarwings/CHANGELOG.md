@@ -1,3 +1,11 @@
+## v0.0.6 - 2025-11-29 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Localize new strings and fix duplicate notifications issue (e30c8ba)
+- Merge pull request #5 from Chaoscontrol/monogoto (ce788da)
+- New Monogoto IoT provider (6710ea8)
+
 ## v0.0.5 - 2025-11-25 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
