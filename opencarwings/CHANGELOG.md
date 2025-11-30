@@ -1,3 +1,35 @@
+## v0.0.6 - 2025-11-29 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Localize new strings and fix duplicate notifications issue (e30c8ba)
+- Merge pull request #5 from Chaoscontrol/monogoto (ce788da)
+- New Monogoto IoT provider (6710ea8)
+
+## v0.0.5 - 2025-11-25 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Visualize heading of ABS events (50ca825)
+- Fix few fields on probe energy info (8ff74f0)
+
+## v0.0.4 - 2025-11-24 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Add carrier and signal level to list API (cd3bd9f)
+- Revert weather channel background to maintain nice compression (2b43197)
+- Small patch to probe crm charges longitude field (45594b5)
+- Another attempt at fixing weather icons (b200e99)
+- Fix MSN data length (5692b3f)
+- More fixes to probe parsing (5b8975e)
+- Bugfixes: Probe CRM MSN and Charge fields, Charge Point remove debug log and weather channel fix snow icon (79fdd9f)
+
+## v0.0.3-1 - 2025-11-04 [Addon Patch]
+
+- Changed server to daphne, now it starts the TCU TCP 55230 port and it's listening
+- Repo cleanup, removed s6-overlay
+
 ## v0.0.3 - 2025-11-03 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
