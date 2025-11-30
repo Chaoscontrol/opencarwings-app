@@ -17,11 +17,6 @@ RUN apk add --no-cache \
     curl \
     libffi-dev \
     openssl-dev \
-#    # --- TAILSCALE & UTILITY ADDITIONS ---
-#     tailscale \
-#     ip6tables \
-#     jq \
-#     # -------------------------------------
     && python3 -m pip install --upgrade pip
 
 # Clone OpenCarwings upstream
@@ -43,9 +38,6 @@ RUN mkdir -p /data/postgres /data/redis /data/static /data/media /data/logs /var
 
 # Configure PostgreSQL
 RUN mkdir -p /run/postgresql && chown postgres:postgres /run/postgresql
-
-# Set ownership for Tailscale state directory
-RUN chown root:root /var/lib/tailscale
 
 # Copy root filesystem
 COPY rootfs/ /
