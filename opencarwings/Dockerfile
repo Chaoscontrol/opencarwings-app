@@ -32,9 +32,17 @@ RUN pip3 install -r requirements.txt psycopg2-binary \
     django-crispy-forms crispy-tailwind \
     whitenoise djangorestframework djangorestframework-simplejwt \
     django-mathfilters drf-yasg
+
+# Download FRP
+ARG FRP_VERSION=0.64.0
+RUN wget -q https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz \
+    && tar -xzf frp_${FRP_VERSION}_linux_amd64.tar.gz \
+    && mv frp_${FRP_VERSION}_linux_amd64/frpc /usr/local/bin/frpc \
+    && chmod +x /usr/local/bin/frpc \
+    && rm -rf frp_${FRP_VERSION}_linux_amd64* 
     
 # Create directories for data persistence
-RUN mkdir -p /data/postgres /data/redis /data/static /data/media /data/logs /var/lib/tailscale
+RUN mkdir -p /data/postgres /data/redis /data/static /data/media /data/logs /etc/frp
 
 # Configure PostgreSQL
 RUN mkdir -p /run/postgresql && chown postgres:postgres /run/postgresql
@@ -45,6 +53,7 @@ COPY rootfs/ /
 # Set permissions for service scripts
 RUN chmod +x /etc/cont-init.d/*.sh || true
 RUN chmod +x /etc/services.d/*/run || true
+RUN chmod +x /usr/local/bin/frpc
 
 # Set environment variables
 ENV PSQL_DATABASE=carwings \
