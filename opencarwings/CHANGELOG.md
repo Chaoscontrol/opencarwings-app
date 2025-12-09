@@ -1,3 +1,9 @@
+## v0.0.10 - 2025-12-09 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Fix charge point requests (1576a65)
+
 ## v0.0.9 - 2025-12-08 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
