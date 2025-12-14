@@ -1,3 +1,12 @@
+## v0.0.12 - 2025-12-14 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Add missing page argument to custom autodj (2b8f2b5)
+- Enhance weather dark mode and exclude channel 0x270f to avoid weekly popups (e3179ba)
+- Landing page fixes and misc patches (b24e5f1)
+- Change battery pack temperature to bars and add Hx note for resistance (7f106bc)
+
 ## v0.0.11 - 2025-12-13 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
