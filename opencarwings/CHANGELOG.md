@@ -1,3 +1,12 @@
+## v0.0.13 - 2025-12-15 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Add apk-tools upgrade before installing packages (4fff48e)
+- Upgrade alpine version (356f6b4)
+- Remove mysql deps (8b81881)
+- Fix ecotree channel bug for page 2 (e650564)
+
 ## v0.0.12 - 2025-12-14 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
