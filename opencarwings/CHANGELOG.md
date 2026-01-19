@@ -1,3 +1,10 @@
+## v0.0.15 - 2026-01-19 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Merge remote-tracking branch 'origin/main' (25c9403)
+- Add logging for unknown requested channels (586852e)
+
 ## v0.0.14 - 2026-01-12 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
