@@ -1,3 +1,9 @@
+## v0.0.17 - 2026-01-27 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Add support for CWS_SYS connection profile file editing for Qy8XXX navigation units (a029440)
+
 ## v0.0.16 - 2026-01-20 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
