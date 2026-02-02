@@ -21,6 +21,8 @@ RUN apk add --no-cache \
 
 # Clone OpenCarwings upstream
 ARG UPSTREAM_REF=main
+# Use the sync marker to invalidate cache when upstream has changes
+COPY .upstream_sync /tmp/upstream_sync_marker
 WORKDIR /opt
 RUN git clone --depth 1 --branch "${UPSTREAM_REF}" \
     https://github.com/developerfromjokela/opencarwings.git opencarwings
