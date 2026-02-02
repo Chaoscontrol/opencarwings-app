@@ -1,3 +1,9 @@
+## v0.0.19 - 2026-02-02 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Fix bug in identifier mismatch notifications (917842d)
+
 ## v0.0.18 - 2026-01-28 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
