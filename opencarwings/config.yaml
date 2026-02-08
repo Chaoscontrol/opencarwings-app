@@ -18,8 +18,12 @@ options:
   trusted_domains: []
   tailscale_auth_key: ""
   tailscale_funnel_hostname: "ocw-tcu"
+  ocm_api_key: ""
+  iternio_api_key: ""
 schema:
   timezone: str?
   log_level: list(trace|debug|info|notice|warning|error|fatal)
   trusted_domains:
     - str?
+  ocm_api_key: str?
+  iternio_api_key: str?

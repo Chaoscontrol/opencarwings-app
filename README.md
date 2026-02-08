@@ -59,11 +59,19 @@ From the previous example: ocw-tcu.mydomain.com
 
 ## Configuration Options
 
-| Option            | Description                         | Default |
-| ----------------- | ----------------------------------- | ------- |
-| `timezone`        | Your timezone                       | `UTC`   |
-| `log_level`       | Logging level                       | `info`  |
-| `trusted_domains` | Allowed domains (include wildcards) | `[]`    |
+| `timezone`        | Your timezone                                  | `UTC`   |
+| `log_level`       | Logging level                                  | `info`  |
+| `trusted_domains` | Allowed domains (include wildcards)            | `[]`    |
+| `ocm_api_key`     | OpenChargeMap API Key (Optional)               | `""`    |
+| `iternio_api_key` | Iternio (ABRP) API Key (Optional/Paid)         | `""`    |
+
+### External API Keys (Optional)
+
+When updating charging stations from the car, we use external services. These are **optional**. You'll need to create and add your own keys for these to work.
+
+- **OpenChargeMap (`ocm_api_key`)**: Used for the primary charging station database. If provided, your car's map will show nearby chargers. You can get a free key [here](https://openchargemap.org/site/develop/api).
+- **Iternio (`iternio_api_key`)**: Provided by the creators of *A Better Routeplanner (ABRP)*. This API is used for **Real-time Status** (is a charger busy?) and some "Near Me" search features. Note that Iternio is a **paid service** for commercial/heavy use.
+- **If left empty**: The add-on will gracefully skip these updates. Your car will simply not show external chargers or their live status, but the server will remain stable.
 
 ## Usage
 
