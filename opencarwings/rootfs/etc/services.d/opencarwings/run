@@ -23,5 +23,4 @@ export SECRET_KEY=django-insecure-default-key-change-in-production
 echo "Starting OpenCarwings server with Daphne..."
 
 exec daphne -b 0.0.0.0 -p 8124 \
-  --endpoint "tcp:port=${TCU_PORT}:interface=0.0.0.0" \
   carwings.asgi:application

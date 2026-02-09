@@ -8,6 +8,14 @@ export TZ=$(bashio::config 'timezone' 'UTC')
 export LOG_LEVEL=$(bashio::config 'log_level' 'info')
 export ACTIVATION_SMS_MESSAGE="NISSAN_EVIT_TELEMATICS_CENTER"
 
+# Ensure persistent logs directory
+if [ ! -L "logs" ]; then
+    bashio::log.info "Configuring persistent logs..."
+    mkdir -p /data/logs
+    [ -d "logs" ] && rm -rf logs
+    ln -s /data/logs logs
+fi
+
 # Database configuration - use local PostgreSQL
 export PSQL_DATABASE=carwings
 export PSQL_USER=carwings_user
