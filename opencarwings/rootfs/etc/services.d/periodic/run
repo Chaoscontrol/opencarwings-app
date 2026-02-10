@@ -29,9 +29,28 @@ else
     export DEBUG=False
 fi
 
+CYCLE=0
+HEARTBEAT_INTERVAL=60  # Log heartbeat every 60 cycles (60 × 60s = 1 hour)
+
 while true; do
-  python3 manage.py tcuperiodicupdate > /dev/null 2>&1
-  python3 manage.py flushexpiredtokens > /dev/null 2>&1
-  bashio::log.info "Periodic background tasks executed (timeouts checked & tokens flushed)."
+  # Run periodic update — capture output for error/event logging
+  UPDATE_OUT=$(python3 manage.py tcuperiodicupdate 2>&1) || true
+  if [ -n "$UPDATE_OUT" ]; then
+    bashio::log.info "tcuperiodicupdate: ${UPDATE_OUT}"
+  fi
+
+  # Flush expired tokens — capture output for error/event logging
+  FLUSH_OUT=$(python3 manage.py flushexpiredtokens 2>&1) || true
+  if [ -n "$FLUSH_OUT" ]; then
+    bashio::log.info "flushexpiredtokens: ${FLUSH_OUT}"
+  fi
+
+  # Heartbeat log every HEARTBEAT_INTERVAL cycles
+  CYCLE=$((CYCLE + 1))
+  if [ "$CYCLE" -ge "$HEARTBEAT_INTERVAL" ]; then
+    bashio::log.info "Periodic tasks heartbeat: ${CYCLE} cycles completed (~1h). All OK."
+    CYCLE=0
+  fi
+
   sleep 60
 done
