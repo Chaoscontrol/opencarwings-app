@@ -43,7 +43,7 @@ Before installing, ensure you have:
 ### 1. Install the app
 
 1. Go to **Settings → Apps → Apps Store → menu (⋮) → Repositories**.
-2. Add: `https://github.com/Chaoscontrol/opencarwings-addon`
+2. Add: `https://github.com/Chaoscontrol/opencarwings-app`
 3. Find **"OpenCarwings"** and click **Install**.
 
 ### 2. Configure the app
@@ -156,4 +156,4 @@ This app tracks the [upstream OpenCarwings](https://github.com/developerfromjoke
 - [**Guide to Bringing Your Navigator Back Online**](https://opencarwings.viaaq.eu/static/navi_guide.html)
 - [**Guide to Bringing Your TCU Back Online**](https://opencarwings.viaaq.eu/static/tcu_guide.html)
 - [**OCW Android app**](https://github.com/developerfromjokela/opencarwings-android)
-- **Issues**: Report app specific issues [on GitHub](https://github.com/Chaoscontrol/opencarwings-addon/issues).
+- **Issues**: Report app specific issues [on GitHub](https://github.com/Chaoscontrol/opencarwings-app/issues).
