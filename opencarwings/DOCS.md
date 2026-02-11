@@ -55,8 +55,8 @@ In the app **Configuration** tab, set:
 | `timezone` | Your local timezone (e.g., `Europe/Madrid`) | `UTC` |
 | `log_level` | Detail of logs (`info`, `debug`, `trace`, etc.) | `info` |
 | `trusted_domains` | **Required.** Your public domain (e.g., `["ocw.duckdns.org"]`) | `[]` |
-| `ocm_api_key` | [OpenChargeMap](https://openchargemap.org/) API key (optional) | `""` |
-| `iternio_api_key` | [Iternio/ABRP](https://www.iternio.com/) API key (optional) | `""` |
+| `ocm_api_key` | [OpenChargeMap](https://openchargemap.org/) API key (optional for updating stations from the navi) | `""` |
+| `iternio_api_key` | [Iternio/ABRP](https://www.iternio.com/) API key (paid, optional for planning routes in the car navi) | `""` |
 
 > [!CAUTION]
 > **`trusted_domains` is mandatory.** Without it, you will get "CSRF Verification Failed" (403 Forbidden) errors on every form submission. Add your public domain exactly as you access it.
@@ -83,7 +83,7 @@ Starting OpenCarwings TCU Socket Server...
 ### 5. Initial Web UI Setup
 
 1. Open `https://your-domain.com:8125` in your browser.
-2. You will see a **security warning** (self-signed certificate) — accept/proceed.
+2. You will see a **security warning** (if using self-signed certificate) — accept/proceed.
 3. Create an admin account and add your vehicle via VIN.
 
 ### 6. Configure Your Car

@@ -43,6 +43,13 @@ server {
         return 301 https://\$host:8125\$request_uri;
     }
 
+    # Serve static files directly
+    location /static/ {
+        alias /opt/opencarwings/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+    }
+
     # Proxy everything else (e.g. Nissan TCU) to Daphne
     location / {
         proxy_pass http://127.0.0.1:8000;
@@ -62,6 +69,13 @@ server {
 
     ssl_certificate $CERT_FILE;
     ssl_certificate_key $KEY_FILE;
+
+    # Serve static files directly
+    location /static/ {
+        alias /opt/opencarwings/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+    }
 
     # Proxy everything to Daphne
     location / {

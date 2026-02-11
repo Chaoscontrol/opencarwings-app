@@ -31,3 +31,33 @@ EOF
 else
     bashio::log.info "settings.py already patched for CSRF/Proxy."
 fi
+
+# --- Patch 2: Inject WhiteNoise for Static Files ---
+# In production (DEBUG=False), Django doesn't serve static files.
+# We inject WhiteNoise middleware and set STATIC_ROOT to ensure they are served.
+STATIC_PATCH_MARKER="# --- OpenCarwings Static Files Patch ---"
+
+if ! grep -q "$STATIC_PATCH_MARKER" "$SETTINGS_FILE"; then
+    bashio::log.info "Patching settings.py for WhiteNoise static file serving..."
+    cat <<'EOF' >> "$SETTINGS_FILE"
+
+# --- OpenCarwings Static Files Patch ---
+# Ensure STATIC_ROOT is set to where we collect files
+STATIC_ROOT = '/opt/opencarwings/staticfiles'
+
+# Inject WhiteNoise Middleware if not present
+MIDDLEWARE_TO_ADD = 'whitenoise.middleware.WhiteNoiseMiddleware'
+if MIDDLEWARE_TO_ADD not in MIDDLEWARE:
+    # Add it after SecurityMiddleware (usually first) or at the top
+    try:
+        sec_index = MIDDLEWARE.index('django.middleware.security.SecurityMiddleware')
+        MIDDLEWARE.insert(sec_index + 1, MIDDLEWARE_TO_ADD)
+    except ValueError:
+        MIDDLEWARE.insert(0, MIDDLEWARE_TO_ADD)
+
+# Enabled compression/caching
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+EOF
+else
+    bashio::log.info "settings.py already patched for Static Files."
+fi
