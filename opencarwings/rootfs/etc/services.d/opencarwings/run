@@ -5,40 +5,17 @@ cd /opt/opencarwings || exit 1
 
 bashio::log.info "OpenCarwings add-on service starting..."
 
-# --- 1. Load Configuration Variables ---
-TCU_PORT=55230
-DAPHNE_PORT=8124
+# --- 1. Load Shared Environment ---
+# shellcheck source=/etc/opencarwings/env.sh
+source /etc/opencarwings/env.sh
 
-MODE=$(bashio::config 'connection_mode')
-
-# Check if we should use the internal Nginx proxy (Local Mode)
-# In local mode, Nginx ALWAYS runs (either with real certs or self-signed),
-# so we must listen on the internal port 8000.
-if [ "$MODE" = "local" ]; then
-    bashio::log.info "Local mode detected. Switching Daphne to internal port 8000 (proxied by Nginx)."
-    DAPHNE_PORT=8000
-else
-    bashio::log.info "Starting Daphne on standard port 8124 (Direct/Public Mode)."
-fi
-
-# Set environment variables for Django
-export PSQL_DATABASE=carwings
-export PSQL_USER=carwings_user
-export PSQL_PASSWORD=secure_password
-export PSQL_DATABASE_HOST=localhost
-export PSQL_DATABASE_PORT=5432
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-export PYTHONPATH=/opt/opencarwings
-export DJANGO_SETTINGS_MODULE=carwings.settings
-export DEBUG=true
-export SECRET_KEY=django-insecure-default-key-change-in-production
+DAPHNE_PORT=8000  # Nginx handles external ports 8124/8125
 
 # --- 2. Configure CSRF Trusted Origins ---
 # We need to explicitly trust the domains + ports to avoid CSRF errors
 CSRF_ORIGINS=""
 
-# Use bashio's native list iteration (jq doesn't work on bashio config output)
+# Use bashio's native list iteration
 DOMAIN_COUNT=$(bashio::config 'trusted_domains | length')
 
 for (( i=0; i < DOMAIN_COUNT; i++ )); do

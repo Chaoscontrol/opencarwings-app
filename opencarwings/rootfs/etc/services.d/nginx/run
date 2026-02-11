@@ -1,17 +1,7 @@
 #!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
 
-MODE=$(bashio::config 'connection_mode')
-
-# Logic: Only run Nginx if we are in 'local' mode.
-# In 'public_vps' mode, Nginx is not needed and might conflict with FRP tunneling structure.
-if [ "$MODE" != "local" ]; then
-    bashio::log.info "Nginx skipped (mode is not 'local')."
-    # Service must stay alive for s6-overlay
-    exec sleep infinity
-fi
-
-bashio::log.info "Starting Nginx for Local Mode HTTPS..."
+bashio::log.info "Starting Nginx HTTPS proxy..."
 
 # Ensure directories exist
 mkdir -p /run/nginx

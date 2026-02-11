@@ -5,25 +5,9 @@ cd /opt/opencarwings || exit 1
 
 bashio::log.info "Starting OpenCarwings TCU Socket Server..."
 
-# Set environment variables for Django
-export PSQL_DATABASE=carwings
-export PSQL_USER=carwings_user
-export PSQL_PASSWORD=secure_password
-export PSQL_DATABASE_HOST=localhost
-export PSQL_DATABASE_PORT=5432
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-export PYTHONPATH="/opt/opencarwings${PYTHONPATH:+:$PYTHONPATH}"
-export DJANGO_SETTINGS_MODULE=carwings.settings
-
-if [ "$(bashio::config 'log_level')" = "debug" ]; then
-    export DEBUG=True
-else
-    export DEBUG=False
-fi
-
-# Port matches addon config and FRP tunnel
-TCU_PORT=55230
+# --- Load Shared Environment ---
+# shellcheck source=/etc/opencarwings/env.sh
+source /etc/opencarwings/env.sh
 
 # Run the management command
 # It listens on all interfaces (0.0.0.0) within the container

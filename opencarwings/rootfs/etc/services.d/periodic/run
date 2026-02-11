@@ -12,22 +12,9 @@ done
 
 bashio::log.info "Starting OpenCarwings periodic update scheduler..."
 
-# Set environment variables
-export PSQL_DATABASE=carwings
-export PSQL_USER=carwings_user
-export PSQL_PASSWORD=secure_password
-export PSQL_DATABASE_HOST=localhost
-export PSQL_DATABASE_PORT=5432
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-export PYTHONPATH="/opt/opencarwings${PYTHONPATH:+:$PYTHONPATH}"
-export DJANGO_SETTINGS_MODULE=carwings.settings
-
-if [ "$(bashio::config 'log_level')" = "debug" ]; then
-    export DEBUG=True
-else
-    export DEBUG=False
-fi
+# --- Load Shared Environment ---
+# shellcheck source=/etc/opencarwings/env.sh
+source /etc/opencarwings/env.sh
 
 CYCLE=0
 HEARTBEAT_INTERVAL=60  # Log heartbeat every 60 cycles (60 × 60s = 1 hour)

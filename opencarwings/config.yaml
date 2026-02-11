@@ -4,6 +4,8 @@ slug: opencarwings
 description: Nissan CARWINGS-compatible server for bringing back Nissan TCUs and online services
 url: https://github.com/Chaoscontrol/opencarwings-addon
 init: false
+map:
+  - ssl
 arch:
   - amd64
 ports:
@@ -17,14 +19,12 @@ ports_description:
 options:
   timezone: UTC
   log_level: info
-  connection_mode: public_vps
   trusted_domains: []
   ocm_api_key: ""
   iternio_api_key: ""
 schema:
   timezone: str?
   log_level: list(trace|debug|info|notice|warning|error|fatal)
-  connection_mode: list(public_vps|local)
   trusted_domains:
     - str?
   ocm_api_key: str?

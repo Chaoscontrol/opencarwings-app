@@ -16,17 +16,9 @@ if [ ! -L "logs" ]; then
     ln -s /data/logs logs
 fi
 
-# Database configuration - use local PostgreSQL
-export PSQL_DATABASE=carwings
-export PSQL_USER=carwings_user
-export PSQL_PASSWORD=secure_password
-export PSQL_DATABASE_HOST=localhost
-export PSQL_DATABASE_PORT=5432
-export REDIS_HOST=localhost
-export REDIS_PORT=6379
-
-# Add current directory to Python path
-export PYTHONPATH="/opt/opencarwings${PYTHONPATH:+:$PYTHONPATH}"
+# --- Load Shared Environment (DB, Redis, Django, DEBUG) ---
+# shellcheck source=/etc/opencarwings/env.sh
+source /etc/opencarwings/env.sh
 
 bashio::log.info "Setting up Django configuration..."
 
@@ -45,26 +37,9 @@ if [ -f "carwings/settings.docker.py" ]; then
         sed -i "s/DEBUG = .*/DEBUG = False/" carwings/settings.py
     fi
     
-    # Build CSRF trusted origins list
-    TRUSTED_ORIGINS="['http://homeassistant.local:8124', 'http://localhost:8124', 'http://127.0.0.1:8124'"
-    
-    # Add user's domains if configured (with wildcard for all subdomains)
-    if bashio::config.has_value 'trusted_domains'; then
-        for domain in $(bashio::config 'trusted_domains'); do
-            TRUSTED_ORIGINS="${TRUSTED_ORIGINS}, 'https://*.${domain}', 'http://*.${domain}'"
-            bashio::log.info "Added trusted domain: ${domain}"
-        done
-    fi
-    
-    TRUSTED_ORIGINS="${TRUSTED_ORIGINS}]"
-    
-    # Append CSRF configuration to settings
-    echo "
-# CSRF trusted origins configuration (for web UI security)
-CSRF_TRUSTED_ORIGINS = ${TRUSTED_ORIGINS}
-" >> carwings/settings.py
-    
-    bashio::log.info "CSRF trusted origins configured"
+    # NOTE: CSRF_TRUSTED_ORIGINS is handled at runtime by:
+    #   1. opencarwings/run — builds the env var from trusted_domains config
+    #   2. 05-patch-settings.sh — patches settings.py to read from env var
     
     export DJANGO_SETTINGS_MODULE="carwings.settings"
 
