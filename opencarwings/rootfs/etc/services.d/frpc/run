@@ -1,2 +1,11 @@
-#!/usr/bin/with-contenv bash
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+
+if [ "$(bashio::config 'connection_mode')" = "local" ]; then
+    bashio::log.info "FRP disabled (local port forwarding mode enabled)."
+    # s6-overlay requires the process to stay alive
+    exec sleep infinity
+fi
+
+bashio::log.info "Starting FRP client for public VPS connectivity..."
 exec /usr/local/bin/frpc -c /etc/frp/frpc.toml

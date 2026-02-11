@@ -15,14 +15,14 @@ ports_description:
 options:
   timezone: UTC
   log_level: info
+  connection_mode: public_vps
   trusted_domains: []
-  tailscale_auth_key: ""
-  tailscale_funnel_hostname: "ocw-tcu"
   ocm_api_key: ""
   iternio_api_key: ""
 schema:
   timezone: str?
   log_level: list(trace|debug|info|notice|warning|error|fatal)
+  connection_mode: list(public_vps|local)
   trusted_domains:
     - str?
   ocm_api_key: str?

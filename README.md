@@ -2,110 +2,96 @@
 
 Home Assistant add-on for [OpenCarwings](https://github.com/developerfromjokela/opencarwings) - a Nissan CARWINGS-compatible server for bringing back Nissan TCUs and online services.
 
-**⚠️ SUPER ALPHA WARNING**: This is one of my first add-ons ever created, and it was fully vibe-coded as I'm not a dev. I just did this for myself, but I think it can be useful for others, so I'm glad to share it. I don't promise to maintain it long term, but I'll do my best as long as I keep my interest in it. Same for bug fixing etc.
-
-I haven't even tested the update process yet from upstream changes. But once it's working, it will update ANY commits done daily. No testing, no alerts. So considering this your warning.
+**⚠️ SUPER ALPHA WARNING**: This add-on is experimental software built with AI and lots of reviews. I created this for my own use and am sharing it "as-is". I don't promise long-term maintenance or prompt bug fixing, but I'll do my best to keep it working as long as I use it myself!
 
 ## What it does
 
-This add-on packages the upstream OpenCarwings server so you can run it directly on Home Assistant OS/Supervisor, making it full private and own all the information yourself. It provides:
+This add-on packages the upstream OpenCarwings server to run on Home Assistant OS/Supervisor. It enables:
 
-- Remote A/C control for Nissan LEAF
-- Charging management
-- Trip data and efficiency stats
-- TCU (Telematics Control Unit) communication
-- Built-in PostgreSQL and Redis databases (no external setup needed)
+- **Remote A/C & Climate control** for compatible Nissan LEAF models.
+- **Charging Management** and battery status monitoring.
+- **Trip Data** and efficiency statistics.
+- **Direct TCU Communication** via raw TCP protocol.
+- **Built-in Infrastructure**: Includes PostgreSQL and Redis (no external setup required).
 
-## Quick Setup
+---
 
-### 1. Add Repository
+## Connectivity & Privacy (IMPORTANT)
 
-In Home Assistant:
+To allow your car to reach this server while you are away, the server must be accessible from the internet. This add-on provides two ways to achieve this:
 
-- Settings → Add-ons → Add-on Store → menu (⋮) → Repositories
-- Add: `https://github.com/Chaoscontrol/opencarwings-addon`
-- Find "OpenCarwings" and click Install
+### Option A: Public VPS (Default / Easy)
+This mode uses a built-in **FRP (Fast Reverse Proxy)** client to tunnel your traffic through a shared public server. 
+- **Pros**: No router configuration needed; works behind CGNAT.
+- **Cons**: **Lower Privacy**. Your car's data flows through a third-party VPS. While the protocol is binary, the VPS owner could theoretically intercept or inject data.
 
-### 2. Configure Trusted Domains
+Honestly there's not much difference of using this mode and the actual OCW public server. The only difference is that you're using your own server instead of the public one, but I did not find a way to make it fully private. 
+- **Setup**: Simply leave `connection_mode` as `public_vps`.
 
-**IMPORTANT**: You need a public domain for remote car access. Configure trusted domains in add-on options:
+### Option B: Local Port Forwarding (Private / Recommended)
+This mode is completely private. You are responsible for making your Home Assistant instance reachable.
+- **Pros**: **Maximum Privacy**. Data goes directly from your car to your home.
+- **Cons**: Requires opening ports on your router; might not work with some ISPs (CGNAT).
+- **Setup**:
+  1. Set `connection_mode: local` in configuration.
+  2. Map the following ports on your router to your Home Assistant IP:
+     - **TCP 55230** (TCU Direct Communication)
+     - **HTTP 8124** (Web UI / API)
+  3. Ensure you have a stable public IP or a Dynamic DNS (DuckDNS, etc.) service running.
 
-```yaml
-trusted_domains:
-  - "yourdomain.com" # Adding a first level domain automatically includes all subdomains
-```
+> [!TIP]
+> **A Note on Tailscale/Cloudflare**: Currently, Tailscale Funnel and Cloudflare Tunnels do not support the raw, non-encrypted TCP protocol required by the Nissan TCU (port 55230). If Tailscale adds raw TCP support in the future, it will be the preferred secure alternative.
 
-This is necessary because your car needs to reach the server remotely for TCU communication.
+---
 
-### 3. Set Up Port Forwarding/Tunnels
+## Installation & Setup
 
-You need to expose these ports publicly so your car can connect:
+1. **Add Repository**:
+   - Settings → Add-ons → Add-on Store → menu (⋮) → Repositories.
+   - Add: `https://github.com/Chaoscontrol/opencarwings-addon`.
+2. **Install**: Find "OpenCarwings" and click Install.
+3. **Configure**:
+   - **`trusted_domains`**: Add your public domain (e.g., `yourname.duckdns.org`).
+   - **`connection_mode`**: Choose `public_vps` or `local`.
+4. **Start**: Start the add-on and check the logs.
+5. **Initial UI Setup**:
+   - Access the Web UI at `http://your-ha-ip:8124`.
+   - Create an admin account and add your vehicle via VIN.
+6. **Car Configuration**:
+   - Update your Nissan LEAF's Navigation and TCU settings to point to your public domain/IP.
+   - For `public_vps` mode, use the domain provided in the logs. For the Navi VFlash URL use: `http://ocw-ha.duckdns.org/WARCondelivbas/it-m_gw10/`. For the TCU URL use: `ocw-ha.duckdns.org`.
+   - For `local` mode, use your own DDNS domain and the same paths. Navi URL: `http://yourdomain.com/WARCondelivbas/it-m_gw10/`. TCU URL: `yourdomain.com`.
 
-- **8124** (Web UI) - Forward to your HA IP
-- **55230** (TCU TCP Server) - Forward to your HA IP
+---
 
-Use port forwarding on your router, or services like Cloudflare Tunnel (my recommendation), ngrok, etc.
+## Configuration Reference
 
-Example:
+| Option | Description | Default |
+|--------|-------------|---------|
+| `timezone` | Your local timezone (e.g., `Europe/Madrid`) | `UTC` |
+| `log_level` | Detail of logs (`info`, `debug`, `trace`, etc.) | `info` |
+| `connection_mode` | `public_vps` (Relay) or `local` (Direct) | `public_vps` |
+| `trusted_domains` | List of domains allowed to access the Web UI | `[]` |
+| `ocm_api_key` | [OpenChargeMap](https://openchargemap.org/) API Key (Optional) | `""` |
+| `iternio_api_key` | [Iternio/ABRP](https://www.iternio.com/) API Key (Optional) | `""` |
 
-- ocw.mydomain.com -> http://homeassistant:8124 (for WebUI)
-- ocw-tcu.mydomain.com -> tcp://homeassistant:55230 (for TCU communication. Notice the TCP!)
+---
 
-### 4. Configure Your Car
+## Versioning & Updates
 
-In your Nissan LEAF's navigation system and TCU settings, use your public domain/IP as the CARWINGS server URL.
+This add-on tracks the [upstream OpenCarwings](https://github.com/developerfromjokela/opencarwings) repository.
+- Our build process clones the latest upstream code whenever the add-on is rebuilt.
+- When new code is committed upstream, the add-on version number is bumped automatically.
+- Your Home Assistant will notify you of an "Update Available". You can choose when to update to pull in the latest upstream changes.
 
-From the previous example: ocw-tcu.mydomain.com
+---
 
-## Configuration Options
+## Credits & Links
 
-| `timezone`        | Your timezone                                  | `UTC`   |
-| `log_level`       | Logging level                                  | `info`  |
-| `trusted_domains` | Allowed domains (include wildcards)            | `[]`    |
-| `ocm_api_key`     | OpenChargeMap API Key (Optional)               | `""`    |
-| `iternio_api_key` | Iternio (ABRP) API Key (Optional/Paid)         | `""`    |
-
-### External API Keys (Optional)
-
-When updating charging stations from the car, we use external services. These are **optional**. You'll need to create and add your own keys for these to work.
-
-- **OpenChargeMap (`ocm_api_key`)**: Used for the primary charging station database. If provided, your car's map will show nearby chargers. You can get a free key [here](https://openchargemap.org/site/develop/api).
-- **Iternio (`iternio_api_key`)**: Provided by the creators of *A Better Routeplanner (ABRP)*. This API is used for **Real-time Status** (is a charger busy?) and some "Near Me" search features. Note that Iternio is a **paid service** for commercial/heavy use.
-- **If left empty**: The add-on will gracefully skip these updates. Your car will simply not show external chargers or their live status, but the server will remain stable.
-
-## Usage
-
-1. Start the add-on
-2. Access WebUI in http://homeassistant:8124
-3. Create an admin account
-4. Add your Nissan vehicle using VIN and TCU details
-5. Configure SMS gateway if needed for TCU wake-up
-6. Your car should now connect remotely!
-
-## Ports Used
-
-- **8124**: Web interface (HTTP)
-- **8125**: Web interface (HTTPS) - configure SSL separately
-- **55230**: TCU communication (TCP)
-
-## Links
-
-- **Upstream Project**: [developerfromjokela/opencarwings](https://github.com/developerfromjokela/opencarwings)
-- **Upstream Website and Public Server**: [opencarwings.viaaq.eu](https://opencarwings.viaaq.eu)
+- **Main Project**: [developerfromjokela/opencarwings](https://github.com/developerfromjokela/opencarwings)
+- **Special Thanks**: Huge thanks to `@developerfromjokela` for his incredible work reversing the Nissan protocol and keeping these cars online.
 - **Nissan TCU Protocol**: [nissan-leaf-tcu](https://github.com/developerfromjokela/nissan-leaf-tcu)
 - [**Guide to Bringing Your Navigator Back Online**](https://opencarwings.viaaq.eu/static/navi_guide.html)
 - [**Guide to Bringing Your TCU Back Online**](https://opencarwings.viaaq.eu/static/tcu_guide.html)
 - [**OCW Android app**](https://github.com/developerfromjokela/opencarwings-android)
-
-## Support
-
-This is experimental software. Use at your own risk. Check the logs if something doesn't work.
-
-- **Issues**: [GitHub Issues](https://github.com/Chaoscontrol/opencarwings-addon/issues)
-
-## Thanks
-
-This is just the addon for this amazing work that @developerfromjokela has done with project.
-My heartfelt thanks to allow all of us oldie Leaf users to make it even a better little EV than it already is.
-
-Full credits to him for OpenCarwings, related projects and guides created to help us navigate this not so straightforward re-connection process.
+- **Issues**: Report add-on specific issues [on GitHub](https://github.com/Chaoscontrol/opencarwings-addon/issues).
