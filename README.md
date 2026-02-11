@@ -36,9 +36,20 @@ This mode is completely private. You are responsible for making your Home Assist
   1. Set `connection_mode: local` in configuration and click **Save**.
   2. Map the following ports on your router to your **Home Assistant IP**:
      - **TCP 55230** (TCU Direct Communication)
-     - **TCP 8124** (Web UI / API)
+     - **TCP 8124** (Car connection)
+     - **TCP 8125** (encrypted Web UI via HTTPS)
   3. Ensure you have a stable public IP or a Dynamic DNS (DuckDNS, etc.) service running.
 
+> [!IMPORTANT]
+> **Enabling HTTPS (Recommended)**: 
+> The add-on includes an internal Nginx proxy for **Local Mode**.
+> 1. **Best Practice**: Copy your SSL certificates (`fullchain.pem` and `privkey.pem`) to `/ssl/` for a secure, green-padlock experience.
+> 2. **Fallback**: If no certificates are found, the add-on will **automatically generate a Self-Signed Certificate**. This ensures traffic is still encrypted, but your browser will show a "Not Secure" warning that you must bypass.
+>
+> **Behavior**:
+> - Browsers on **Port 8124** (HTTP) are redirected to **8125** (HTTPS).
+> - The Car connects on **Port 8124** (HTTP) without redirection.
+>
 > [!TIP]
 > **A Note on Tailscale/Cloudflare**: Currently, Tailscale Funnel and Cloudflare Tunnels do not support the raw, non-encrypted TCP protocol required by the Nissan TCU (port 55230). If Tailscale adds raw TCP support in the future, it will be the preferred secure alternative.
 

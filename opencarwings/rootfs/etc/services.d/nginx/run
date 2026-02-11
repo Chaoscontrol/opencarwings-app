@@ -1,0 +1,91 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+
+MODE=$(bashio::config 'connection_mode')
+
+# Logic: Only run Nginx if we are in 'local' mode.
+# In 'public_vps' mode, Nginx is not needed and might conflict with FRP tunneling structure.
+if [ "$MODE" != "local" ]; then
+    bashio::log.info "Nginx skipped (mode is not 'local')."
+    # Service must stay alive for s6-overlay
+    exec sleep infinity
+fi
+
+bashio::log.info "Starting Nginx for Local Mode HTTPS..."
+
+# Ensure directories exist
+mkdir -p /run/nginx
+mkdir -p /data/ssl
+
+# SSL Certificate Handling
+# Priority 1: User-provided valid certs from Home Assistant
+if [ -f /ssl/fullchain.pem ] && [ -f /ssl/privkey.pem ]; then
+    bashio::log.info "Valid SSL certificates found in /ssl/. Using them."
+    CERT_FILE="/ssl/fullchain.pem"
+    KEY_FILE="/ssl/privkey.pem"
+else
+    # Priority 2: Self-Signed Fallback
+    bashio::log.warning "No valid certificates found in /ssl/. Generating self-signed certificate..."
+    
+    # Generate only if doesn't exist to avoid annoying browser warnings on every restart
+    if [ ! -f /data/ssl/selfsigned.pem ]; then
+        openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+            -keyout /data/ssl/selfsigned.key \
+            -out /data/ssl/selfsigned.pem \
+            -subj "/C=US/ST=State/L=City/O=OpenCarwings/CN=homeassistant.local"
+    fi
+    
+    CERT_FILE="/data/ssl/selfsigned.pem"
+    KEY_FILE="/data/ssl/selfsigned.key"
+    bashio::log.warning "Self-signed certificate active. Browsers will show a security warning."
+fi
+
+# Generate dynamic Nginx configuration
+# - Listen on 8124 (HTTP) -> Redirect Browsers to HTTPS, Proxy others (TCU) to 8000
+# - Listen on 8125 (HTTPS) -> Proxy all to 8000
+cat > /etc/nginx/http.d/default.conf <<EOF
+server {
+    listen 8124;
+    server_name _;
+
+    # Redirect Browsers to HTTPS on port 8125
+    if (\$http_user_agent ~* "Mozilla|Chrome|Safari|Edge|Firefox") {
+        return 301 https://\$host:8125\$request_uri;
+    }
+
+    # Proxy everything else (e.g. Nissan TCU) to Daphne
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+server {
+    listen 8125 ssl;
+    server_name _;
+
+    ssl_certificate $CERT_FILE;
+    ssl_certificate_key $KEY_FILE;
+
+    # Proxy everything to Daphne
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 8125;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+EOF
+
+exec nginx -g "daemon off;"

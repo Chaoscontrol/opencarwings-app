@@ -2,7 +2,9 @@ ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
 # Install system dependencies
-RUN apk add --no-cache \
+RUN apk add --no-cache --upgrade \
+    libcrypto3 \
+    libssl3 \
     python3 \
     py3-pip \
     postgresql \
@@ -16,7 +18,9 @@ RUN apk add --no-cache \
     postgresql-client \
     curl \
     libffi-dev \
+    openssl \
     openssl-dev \
+    nginx \
     && python3 -m pip install --upgrade pip
 
 # Clone OpenCarwings upstream
