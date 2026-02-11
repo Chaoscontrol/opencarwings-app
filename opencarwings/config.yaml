@@ -9,9 +9,11 @@ arch:
 ports:
   8124/tcp: 8124
   8125/tcp: 8125
+  55230/tcp: 55230
 ports_description:
   8124/tcp: Web UI and Navigator backend (HTTP)
   8125/tcp: Web UI (HTTPS)
+  55230/tcp: Nissan TCU direct communication (TCU Link) - DO NOT CHANGE THIS PORT - IT IS FIXED BY THE TCU
 options:
   timezone: UTC
   log_level: info

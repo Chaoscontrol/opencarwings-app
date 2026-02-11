@@ -202,9 +202,14 @@ if os.path.exists(cp_path):
         content = content.replace(old_ocm_block, new_ocm_block)
         content = content.replace(old_iternio_block, new_iternio_block)
         
+        # 3. Silence Noisy Logs (MeshID search and POI details)
+        # Remove these entirely as requested by user - they are unreadable at high frequency
+        content = content.replace('logger.info("Searching for nearest meshid: %f %f", lat, lon)', '')
+        content = content.replace('logger.info(cpinfo_obj)', '')
+
         with open(cp_path, 'w') as f:
             f.write(content)
-        print("[INFO] CP application patched successfully.")
+        print("[INFO] CP application patched successfully (stability + log silencing).")
 EOF
 else
     bashio::log.error "settings.docker.py not found!"

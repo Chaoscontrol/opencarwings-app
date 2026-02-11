@@ -33,10 +33,10 @@ This mode is completely private. You are responsible for making your Home Assist
 - **Pros**: **Maximum Privacy**. Data goes directly from your car to your home.
 - **Cons**: Requires opening ports on your router; might not work with some ISPs (CGNAT).
 - **Setup**:
-  1. Set `connection_mode: local` in configuration.
-  2. Map the following ports on your router to your Home Assistant IP:
+  1. Set `connection_mode: local` in configuration and click **Save**.
+  2. Map the following ports on your router to your **Home Assistant IP**:
      - **TCP 55230** (TCU Direct Communication)
-     - **HTTP 8124** (Web UI / API)
+     - **TCP 8124** (Web UI / API)
   3. Ensure you have a stable public IP or a Dynamic DNS (DuckDNS, etc.) service running.
 
 > [!TIP]
@@ -51,8 +51,8 @@ This mode is completely private. You are responsible for making your Home Assist
    - Add: `https://github.com/Chaoscontrol/opencarwings-addon`.
 2. **Install**: Find "OpenCarwings" and click Install.
 3. **Configure**:
-   - **`trusted_domains`**: Add your public domain (e.g., `yourname.duckdns.org`).
-   - **`connection_mode`**: Choose `public_vps` or `local`.
+    - **`trusted_domains`**: Add your public domain here (e.g., `ocw-ha.duckdns.org`). This is **mandatory if using HTTPS/SSL** or a secure reverse proxy to prevent "CSRF Verification Failed" errors. It may be optional for simple unencrypted HTTP access.
+    - **`connection_mode`**: Choose `public_vps` (default) or `local`.
 4. **Start**: Start the add-on and check the logs.
 5. **Initial UI Setup**:
    - Access the Web UI at `http://your-ha-ip:8124`.
