@@ -1,3 +1,65 @@
+## v0.0.19-1 - 2026-02-12 [Addon Patch]
+
+- Updated readme Fix for serving static files in production
+- One more addon reference
+- Updated all references from addon to app
+- Refactor by removing VPS connection mode. Only local mode supported. DuckDNS highly recommended in the readme to handle SSL.
+- Nginx added to handle https connection on local mode
+- Cleaned logs Added TCU ports to HA config to listen in local mode Updated readme
+- Added new option to choose public VPS or local port forwarding Updated readme with all new option and setup
+- Fix car map requests by fixing API key with spaces Improve heartbeat logs to 1 per hour
+- tcuserver service added Daphne TCP endpoint removed Persisten logs fixed Fix for upstream patches Fix for crash on missing API keys
+- OCM and Iternio services added Readme updated Upstream compatibility patches
+- Added periodic services to handle timeouts Updated frp config to toml
+- Fix upstream sync to fetch latest
+- Merge branch 'main' of https://github.com/Chaoscontrol/opencarwings-addon
+- Upstream sync - v0.0.19
+- Upstream sync - v0.0.18
+- Upstream sync - v0.0.17
+- Upstream sync - v0.0.16
+- Upstream sync - v0.0.15
+- Upstream sync - v0.0.14
+- Upstream sync - v0.0.13
+- Upstream sync - v0.0.12
+- Upstream sync - v0.0.11
+- Upstream sync - v0.0.10
+- Upstream sync - v0.0.9
+- Upstream sync - v0.0.8
+- Bundled frpc to expose necessary ports via VPS
+- Upstream sync - v0.0.7
+- Bump addon version to v0.0.6-1
+- Merge branch 'main' of https://github.com/Chaoscontrol/opencarwings-addon
+- Removed all Tailscale implementation as it cannot expose custom TCP ports (55230)
+- Upstream sync - v0.0.6
+- Upstream sync - v0.0.5
+- Upstream sync - v0.0.4
+- Commented tailscale additions to debug. Working version without tailscale.
+- Attempt 1 at integrating Tailscale for TCU port tunnel. Not starting.
+- Bump addon version to v0.0.3-1
+- Changed server to daphne, now it starts the TCU TCP 55230 port and it's listening
+- Repo cleanup, removed s6-overlay
+- Upstream sync - v0.0.3
+- Merge branch 'main' of https://github.com/Chaoscontrol/opencarwings-addon
+- Better versioning, splitting addon patch and upstream update
+- Bump version to v0.0.2
+- Updated github workflows for updates and reset versioning
+- Fixing addon-patch workflow
+- Added icon and logo
+- New readme and instructions
+- Added trusted domains option Removed configurable Activation SMS message
+- Refactored django-setup and dockerfile to use the existing settings, and added all necessary dependencies
+- bootstrap4 added in attempt to fix forms not loading properly
+- Sign up works. Forms missing CSS, and Radio options not loading.
+- Added more dependencies
+- All files changes to LF and adjusted shebangs
+- Changed file to LF
+- Sign up page working
+- UI loads
+- Debugging health check
+- Django running, health check issues
+- Main skeleton and runtime working. App still not accessible.
+- Upstream repo folder and gitignore
+
 ## v0.0.19 - 2026-02-02 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
