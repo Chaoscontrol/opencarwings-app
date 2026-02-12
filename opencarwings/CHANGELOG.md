@@ -1,3 +1,9 @@
+## v0.0.19-2 - 2026-02-12 [Addon Patch]
+
+- Fix log spam for heartbeat
+- Merge branch 'main' of https://github.com/Chaoscontrol/opencarwings-app
+- Added dos2unix to ensure LF on files Added redis fix for better debug logging Added extra debug logs
+
 ## v0.0.19-1 - 2026-02-12 [Addon Patch]
 
 - Updated readme Fix for serving static files in production
