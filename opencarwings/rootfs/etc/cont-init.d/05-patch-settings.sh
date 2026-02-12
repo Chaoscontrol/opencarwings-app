@@ -61,3 +61,108 @@ EOF
 else
     bashio::log.info "settings.py already patched for Static Files."
 fi
+
+# --- Patch 3: Force Console Logging & Dynamic Debug Level ---
+# We force all logs to the console so we can debug.
+# We also dynamically set the log level based on the DEBUG env var.
+
+LOGGING_PATCH_MARKER="# --- OpenCarwings Logging Patch ---"
+
+if ! grep -q "$LOGGING_PATCH_MARKER" "$SETTINGS_FILE"; then
+    bashio::log.info "Patching settings.py for Console Logging & Debug Level..."
+    cat <<'EOF' >> "$SETTINGS_FILE"
+
+# --- OpenCarwings Logging Patch ---
+import os
+import sys
+
+# Determine log level based on DEBUG environment variable
+DEBUG_MODE = os.environ.get('DEBUG', 'False') == 'True'
+LOG_LEVEL = 'DEBUG' if DEBUG_MODE else 'INFO'
+
+# Overwrite logging to ensure everything goes to stdout/stderr
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'stream': sys.stdout,
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',  # Keep django quiet unless critical, even in debug
+            'propagate': False,
+        },
+        'carwings': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': True,
+        },
+        'tcuserver': {
+            'handlers': ['console'],
+            'level': 'DEBUG', # Force DEBUG for tcuserver to see everything
+            'propagate': True,
+        },
+    },
+}
+EOF
+else
+    bashio::log.info "settings.py already patched for Logging."
+fi
+
+# --- Patch 4: Force Redis Channel Layer ---
+# In production, we must ensure:
+# 1. Channels uses Redis (not InMemory) so Daphne and TCUserver can talk.
+
+REDIS_PATCH_MARKER="# --- OpenCarwings Redis Patch ---"
+
+if ! grep -q "$REDIS_PATCH_MARKER" "$SETTINGS_FILE"; then
+    bashio::log.info "Patching settings.py for Redis Channel Layer..."
+    cat <<'EOF' >> "$SETTINGS_FILE"
+
+# --- OpenCarwings Redis Patch ---
+import os
+
+# Force Redis Channel Layer
+# This ensures daphne (web) and tcuserver (worker) share the same bus.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("localhost", 6379)],
+        },
+    },
+}
+
+# Safety: Ensure Loopback is Allowed for internal communication
+if "localhost" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("localhost")
+if "127.0.0.1" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("127.0.0.1")
+if "0.0.0.0" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("0.0.0.0")
+EOF
+else
+    bashio::log.info "settings.py already patched for Redis."
+fi
+
+
+# --- Patch 5: Instrument TCUserver for Debugging ---
+# We inject a log message right at the start of handle_client to see if connections reach Python.
+TCUSERVER_FILE="/opt/opencarwings/tculink/management/commands/tcuserver.py"
+
+if [ -f "$TCUSERVER_FILE" ]; then
+    bashio::log.info "Instrumenting tcuserver.py for connection debugging..."
+    # Inject logging after the function definition
+    sed -i "/async def handle_client(self, reader, writer):/a \\        logger.info(f'CONNECTION DEBUG: New connection from {writer.get_extra_info(\"peername\")}')" "$TCUSERVER_FILE"
+else
+    bashio::log.warning "Could not find tcuserver.py to instrument!"
+fi
+

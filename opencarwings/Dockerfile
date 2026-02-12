@@ -21,6 +21,7 @@ RUN apk add --no-cache --upgrade \
     openssl \
     openssl-dev \
     nginx \
+    dos2unix \
     && python3 -m pip install --upgrade pip
 
 # Clone OpenCarwings upstream
@@ -50,8 +51,11 @@ RUN mkdir -p /run/postgresql && chown postgres:postgres /run/postgresql
 COPY rootfs/ /
 
 # Set permissions for service scripts
-RUN chmod +x /etc/cont-init.d/*.sh || true
-RUN chmod +x /etc/services.d/*/run || true
+# Fix Windows line endings and set permissions
+RUN dos2unix /etc/cont-init.d/*.sh && \
+    dos2unix /etc/services.d/*/run && \
+    chmod +x /etc/cont-init.d/*.sh && \
+    chmod +x /etc/services.d/*/run
 
 
 # Set environment variables
