@@ -1,3 +1,8 @@
+## v0.0.20-1 - 2026-02-15 [Addon Patch]
+
+- feat: add Monogoto SMS delivery webhook support. feat: revamp full logging docs: Update ALERTS.md with upstream-first alert matrix documentation
+- Log revamp v1
+
 ## v0.0.20 - 2026-02-15 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
