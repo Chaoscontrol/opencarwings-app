@@ -50,13 +50,14 @@ Before installing, ensure you have:
 
 In the app **Configuration** tab, set:
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `timezone` | Your local timezone (e.g., `Europe/Madrid`) | `UTC` |
-| `log_level` | Detail of logs (`info`, `debug`, `trace`, etc.) | `info` |
-| `trusted_domains` | **Required.** Your public domain (e.g., `["ocw.duckdns.org"]`) | `[]` |
-| `ocm_api_key` | [OpenChargeMap](https://openchargemap.org/) API key (optional for updating stations from the navi) | `""` |
-| `iternio_api_key` | [Iternio/ABRP](https://www.iternio.com/) API key (paid, optional for planning routes in the car navi) | `""` |
+| Option                                  | Description                                                                                           | Default |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
+| `timezone`                              | Your local timezone (e.g., `Europe/Madrid`)                                                           | `UTC`   |
+| `log_level`                             | Detail of logs (`info`, `debug`, `trace`, etc.)                                                       | `info`  |
+| `trusted_domains`                       | **Required.** Your public domain (e.g., `["ocw.duckdns.org"]`)                                        | `[]`    |
+| `ocm_api_key`                           | [OpenChargeMap](https://openchargemap.org/) API key (optional for updating stations from the navi)    | `""`    |
+| `iternio_api_key`                       | [Iternio/ABRP](https://www.iternio.com/) API key (paid, optional for planning routes in the car navi) | `""`    |
+| `monogoto_sms_delivery_webhook_enabled` | Enable Monogoto SMS delivery confirmation webhook endpoint/logging                                    | `false` |
 
 > [!CAUTION]
 > **`trusted_domains` is mandatory.** Without it, you will get "CSRF Verification Failed" (403 Forbidden) errors on every form submission. Add your public domain exactly as you access it.
@@ -65,15 +66,16 @@ In the app **Configuration** tab, set:
 
 On your **router**, forward these ports to your **Home Assistant IP**:
 
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| **55230** | TCP | TCU Direct Communication (Nissan protocol) |
-| **8124** | TCP | HTTP — Car connection & browser redirect to HTTPS |
-| **8125** | TCP | HTTPS — Encrypted Web UI |
+| Port      | Protocol | Purpose                                           |
+| --------- | -------- | ------------------------------------------------- |
+| **55230** | TCP      | TCU Direct Communication (Nissan protocol)        |
+| **8124**  | TCP      | HTTP — Car connection & browser redirect to HTTPS |
+| **8125**  | TCP      | HTTPS — Encrypted Web UI                          |
 
 ### 4. Start the app
 
 Click **Start** and check the **Log** tab. You should see:
+
 ```
 Starting Nginx HTTPS proxy...
 Starting OpenCarwings server with Daphne on port 8000...
@@ -89,11 +91,13 @@ Starting OpenCarwings TCU Socket Server...
 ### 6. Configure Your Car
 
 Update your Nissan LEAF's **Navigation** and **TCU** settings:
+
 - **Navi VFlash URL**: `http://yourdomain.com/WARCondelivbas/it-m_gw10/`
 - **TCU Server URL**: `yourdomain.com`
 
 > [!TIP]
-> **SSL & Domain Setup (Recommended)**: For the best experience (valid SSL certificates and reliable connection), we strongly recommend using the **DuckDNS App (formerly Add-on)**. 
+> **SSL & Domain Setup (Recommended)**: For the best experience (valid SSL certificates and reliable connection), we strongly recommend using the **DuckDNS App (formerly Add-on)**.
+>
 > - It handles your public domain (DDNS).
 > - It automatically manages Let's Encrypt SSL certificates.
 > - **Why DuckDNS?** Even if you use Tailscale or Cloudflare Tunnels for remote HA access, they **cannot** handle as of yet the raw TCP traffic required by the car (port 55230). DuckDNS combined with port forwarding is the only way for the car to connect.
@@ -113,7 +117,7 @@ Update your Nissan LEAF's **Navigation** and **TCU** settings:
 > seconds: 300
 > ```
 >
-> *Note: You do **not** need to add the SSL certificate paths to your `configuration.yaml` http section like DuckDNS suggests if you only use them for this app. They're only for HA access.*
+> _Note: You do **not** need to add the SSL certificate paths to your `configuration.yaml` http section like DuckDNS suggests if you only use them for this app. They're only for HA access._
 
 ---
 
@@ -139,9 +143,30 @@ Internet → Router Port Forward → Home Assistant
 
 ---
 
+## Monogoto SMS Delivery Webhook
+
+If `monogoto_sms_delivery_webhook_enabled: true`, the app exposes:
+
+- `POST /api/webhook/monogoto/sms-delivery/?token=ocw`
+
+Behavior:
+
+- Logs parsed webhook payloads at debug level.
+- Accepts both JSON object and JSON array payloads.
+- Matches car by ICCID (with tolerance for Monogoto one-digit-short ICCID).
+- Logs confirmation line:
+  - `[app] Monogoto webhook: SMS delivered`
+
+Startup convenience:
+
+- On startup, the app logs copy-ready webhook URL(s) using `trusted_domains`.
+
+---
+
 ## Versioning & Updates
 
 This app tracks the [upstream OpenCarwings](https://github.com/developerfromjokela/opencarwings) repository.
+
 - Our build process clones the latest upstream code whenever the app is rebuilt.
 - When new code is committed upstream, the app version number is bumped automatically.
 - Your Home Assistant will notify you of an "Update Available". You can choose when to update to pull in the latest upstream changes.
