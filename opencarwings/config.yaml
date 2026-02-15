@@ -1,5 +1,5 @@
 name: OpenCarwings
-version: "0.0.19-2"
+version: "0.0.20"
 slug: opencarwings
 description: Nissan CARWINGS-compatible server for bringing back Nissan TCUs and online services
 url: https://github.com/Chaoscontrol/opencarwings-app

@@ -1,3 +1,10 @@
+## v0.0.20 - 2026-02-15 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Merge remote-tracking branch 'origin/main' (6120eda)
+- Add sub-fields inside alertstate and resultstate and logging to determine all possible values (738165d)
+
 ## v0.0.19-2 - 2026-02-12 [Addon Patch]
 
 - Fix log spam for heartbeat
