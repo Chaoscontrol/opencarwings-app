@@ -20,6 +20,8 @@ export REDIS_PORT=6379
 export PYTHONPATH="/opt/opencarwings${PYTHONPATH:+:$PYTHONPATH}"
 export DJANGO_SETTINGS_MODULE=carwings.settings
 export SECRET_KEY=django-insecure-default-key-change-in-production
+export MONOGOTO_SMS_DELIVERY_WEBHOOK_ENABLED=$(bashio::config 'monogoto_sms_delivery_webhook_enabled' 'false')
+export MONOGOTO_SMS_DELIVERY_WEBHOOK_TOKEN="ocw"
 
 # Debug mode — only enable when log_level is set to debug
 if [ "$(bashio::config 'log_level')" = "debug" ]; then

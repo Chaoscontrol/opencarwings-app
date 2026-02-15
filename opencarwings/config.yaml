@@ -22,6 +22,7 @@ options:
   trusted_domains: []
   ocm_api_key: ""
   iternio_api_key: ""
+  monogoto_sms_delivery_webhook_enabled: false
 schema:
   timezone: str?
   log_level: list(trace|debug|info|notice|warning|error|fatal)
@@ -29,3 +30,4 @@ schema:
     - str?
   ocm_api_key: str?
   iternio_api_key: str?
+  monogoto_sms_delivery_webhook_enabled: bool?

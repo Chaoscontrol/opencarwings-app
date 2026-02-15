@@ -1,90 +1,247 @@
-# OpenCarwings Alert System & Status Codes
+# OpenCarwings Alert Matrix (Upstream-First)
 
-This document outlines the internal Alert Types and Vehicle Result States used by the OpenCarwings `tcuserver.py` component to classify vehicle events.
+This document defines alert behavior using upstream `tcuserver.py` as the source of truth, then maps what this addon implements/overrides.
 
-**Source Information:**
-- **Source File**: `tculink/management/commands/tcuserver.py`
-- **Repository**: [developerfromjokela/opencarwings](https://github.com/developerfromjokela/opencarwings)
-- **Patch Location**: `etc/cont-init.d/05-patch-settings.sh` (Patch 5)
+## Source of Truth
 
----
+- Upstream file: `upstream-opencarwings/tculink/management/commands/tcuserver.py`
+- Addon patch injector: `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh`
 
-## 1. Alert Types (Internal IDs)
+## Canonical Alert Types
 
-These are the numerical IDs used by the `AlertHistory` model to log events in the database.
-
-| Type ID | Description | Source Trigger (Packet Type) |
-| :--- | :--- | :--- |
-| **1** | Charge Finished | `remote_stop` (if `alertstate` is 4 or 68) |
-| **2** | Charge Started | `charge_result` (default) |
-| **3** | Cable Reminder / Unplugged | `cp_remind` OR `charge_result` (if `resultstate` is 17) |
-| **4** | A/C Started | `ac_result` (if `resultstate` is 64) |
-| **5** | A/C Stopped | `ac_result` (if `resultstate` is 32) |
-| **6** | TCU Config Received | Message Type 5 (Config Sync) |
-| **7** | A/C Auto-Off / Finished | `ac_result` (if `resultstate` is 192) OR `remote_stop` default |
-| **8** | Quick Charge Finished | `remote_stop` (if `alertstate` is 8) |
-| **9** | Battery Heater ON | `battery_heat` (if active) |
-| **10** | Battery Heater OFF | `battery_heat` (if inactive) |
-| **96** | Charge Error | (Unused/Reserved for future logic) |
-| **97** | A/C Error | `ac_result` (if `resultstate` is unknown) |
-| **99** | System Error | Authentication Failure, ID Mismatch, Invalid Packet |
+| Type | Meaning                       |
+| :--- | :---------------------------- |
+| 1    | Charge finished               |
+| 2    | Charge start command executed |
+| 3    | Cable reminder / unplugged    |
+| 4    | A/C started                   |
+| 5    | A/C stopped                   |
+| 6    | TCU config received           |
+| 7    | A/C finished / auto off       |
+| 8    | Quick charge finished         |
+| 9    | Battery heater on             |
+| 10   | Battery heater off            |
+| 97   | A/C error                     |
+| 99   | System/auth/identity error    |
 
 ---
 
-## 2. Vehicle Result States (Raw Protocol)
+## Upstream Case Matrix
 
-These are the raw hexadecimal/decimal values returned by the TCU (Telematics Control Unit) in specific response packets.
+### Identity/Auth failures (`message_type` any non-config path)
 
-### Charge Result (`charge_result`)
-Sent by the car after receiving a "Start Charge" command.
+| Condition                  | Upstream action |
+| :------------------------- | :-------------- |
+| TCU ID mismatch            | Alert type `99` |
+| Navi ID mismatch           | Alert type `99` |
+| ICCID mismatch             | Alert type `99` |
+| Missing auth when required | Alert type `99` |
+| Invalid auth when required | Alert type `99` |
 
-| ResultState | Hex | Meaning | Alert Type |
-| :--- | :--- | :--- | :--- |
-| **Any** | - | Charge Command Accepted | 2 (Default) |
-| **17** | `0x11` | **Vehicle Unplugged** (Charge failed) | 3 (Patched) |
+### DATA packet cases (`message_type == 3`)
 
-### A/C Result (`ac_result`)
-Sent by the car after receiving an A/C command.
+| `body_type`     | Key state(s)                | Upstream alert type | Notes                                  |
+| :-------------- | :-------------------------- | :------------------ | :------------------------------------- |
+| `cp_remind`     | N/A                         | `3`                 | Unplugged reminder                     |
+| `ac_result`     | `resultstate == 0x40`       | `4`                 | A/C started                            |
+| `ac_result`     | `resultstate == 0x20`       | `5`                 | A/C stopped                            |
+| `ac_result`     | `resultstate == 192`        | `7`                 | A/C finished                           |
+| `ac_result`     | any other `resultstate`     | `97`                | A/C error/fallback                     |
+| `remote_stop`   | `alertstate in {4, 0x44}`   | `1`                 | Normal charge finished                 |
+| `remote_stop`   | `alertstate == 8`           | `8`                 | Quick charge finished                  |
+| `remote_stop`   | any other `alertstate`      | `7`                 | Treated as A/C finished fallback       |
+| `charge_result` | default upstream behavior   | `2`                 | Upstream sets type `2` unconditionally |
+| `battery_heat`  | `batt_heat_active == true`  | `9`                 | Heater on                              |
+| `battery_heat`  | `batt_heat_active == false` | `10`                | Heater off                             |
 
-| ResultState | Hex | Meaning | Alert Type |
-| :--- | :--- | :--- | :--- |
-| **64** | `0x40` | A/C Started Successfully | 4 |
-| **32** | `0x20` | A/C Stopped Successfully | 5 |
-| **192** | `0xC0` | A/C Finished / Auto-Off | 7 |
-| **Others** | - | A/C Operation Failed | 97 |
+### Config packet case (`message_type == 5`)
 
-### Remote Stop (`remote_stop`)
-Sent by the car when an operation stops (A/C or Charging). The system uses `alertstate` to differentiate.
-
-| AlertState | Hex | Meaning | Alert Type |
-| :--- | :--- | :--- | :--- |
-| **4** | `0x04` | Normal Charge Complete | 1 |
-| **68** | `0x44` | Normal Charge Complete | 1 |
-| **8** | `0x08` | Quick Charge Complete | 8 |
-| **Others** | - | A/C Operation Complete | 7 |
+| Condition                      | Upstream action |
+| :----------------------------- | :-------------- |
+| `config_read` payload received | Alert type `6`  |
 
 ---
 
-## 3. Special Error States (Type 99)
+## Addon Extensions (No Alert-Type Override)
 
-These are generated by the server logic itself when validation fails:
+This addon extends upstream behavior in runtime patching without changing upstream `charge_result` alert typing:
 
-- **TCU ID Mismatch**: The TCU ID reported by the car does not match the database record.
-- **Navi ID Mismatch**: The Navigation Unit ID does not match.
-- **SIM ID (ICCID) Mismatch**: The SIM card ID does not match.
-- **Authentication Failed**: Username/Password provided by the car (in GDC packet) is incorrect or missing.
+1. Telemetry conflict detail (diagnostic only):
 
-## Sources & References
+- If `charge_result` has `resultstate == 0` and `pluggedin == false`, addon keeps charge classification but logs conflict detail.
+- This does not change alert type.
 
-The values documented above were derived from two primary sources:
+2. Additional summary logs:
 
-1.  **Upstream Source Code**: The original handling logic is defined in `tcuserver.py` from the OpenCarwings repository.
-    *   **File**: [`tcuserver.py`](https://github.com/developerfromjokela/opencarwings/blob/main/tculink/management/commands/tcuserver.py)
-    *   **Relevant Lines**: The `handle_client` method (specifically around the `parse_gdc_packet` logic) defines how `resultstate` and `alertstate` are mapped to internal Alert IDs.
-        *   `ac_result`: Maps states 64 (0x40), 32 (0x20), and 192 to A/C alerts.
-        *   `remote_stop`: Maps states 4, 68 (0x44), and 8 to Charge Finish alerts.
-        *   `charge_result`: Originally hardcoded to Alert Type 2.
+- Addon emits extra tagged summaries prefixed with `[app]`.
 
-2.  **Local Patches**: We have modified this logic in our specific deployment to handle the "Unplugged" state correctly.
-    *   **File**: `rootfs/etc/cont-init.d/05-patch-settings.sh`
-    *   **Modification**: We inject logic to check for `resultstate == 17` (0x11) in `charge_result` packets, mapping it to "Cable Reminder" instead of "Charge Start".
+3. `ac_result` state `16` interpretation (addon only):
+
+- Upstream does not map `resultstate=16` explicitly and falls back to A/C error alert type.
+- Addon summary log interprets observed `A/C Off when already off` packets as:
+  - `A/C already off (no action needed)`
+- Inference basis:
+  - `resultstate == 16`
+  - plus protocol/context signal (`pri_ac_stop_result == 1` or command type `4`).
+- This is log-message interpretation only; upstream alert persistence behavior is preserved.
+
+---
+
+## `charge_result` Policy (Current Addon)
+
+| Condition                                   | Alert type | Detail behavior                           |
+| :------------------------------------------ | :--------- | :---------------------------------------- |
+| any `resultstate`                           | `2`        | Logged as charge started                  |
+| `resultstate == 0` and `pluggedin == false` | `2`        | Adds telemetry-conflict diagnostic detail |
+
+This is aligned with upstream behavior.
+
+---
+
+## Coverage Map: Upstream vs Addon
+
+Status meanings:
+
+- `Implemented`: matches upstream
+- `Overridden`: intentional divergence
+- `Extended`: additive behavior without changing upstream classification
+- `Missing`: upstream behavior not represented in addon patch logic
+
+| Upstream case                                     | Addon status             | Anchor in `05-patch-settings.sh`                               | Action                                            |
+| :------------------------------------------------ | :----------------------- | :------------------------------------------------------------- | :------------------------------------------------ |
+| `cp_remind -> type 3`                             | Implemented              | `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh:324` | Keep                                              |
+| `ac_result` state mapping (`4/5/7/97`)            | Implemented              | `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh:343` | Keep                                              |
+| `remote_stop` state mapping (`1/8/7`)             | Implemented              | `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh:349` | Keep                                              |
+| `charge_result -> type 2` upstream default        | Implemented              | `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh:303` | Keep                                              |
+| `battery_heat -> type 9/10`                       | Implemented              | `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh:324` | Keep                                              |
+| `message_type == 5 -> type 6`                     | Implemented              | `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh:324` | Keep                                              |
+| Upstream identity/auth `99` alerts                | Implemented              | `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh:324` | Keep                                              |
+| Upstream notification text payloads               | Missing (not replicated) | N/A                                                            | Accept for now; no behavior break for alert types |
+| Telemetry conflict detail (`state 0 + unplugged`) | Extended                 | `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh:356` | Keep for diagnostics                              |
+| `ac_result` state `16` no-op summary              | Extended                 | `opencarwings/rootfs/etc/cont-init.d/05-patch-settings.sh`     | Keep (addon interpretation only)                  |
+
+---
+
+## Observed Anomalies / Follow-Up Candidates (Documented Only)
+
+These are intentionally documented only in this iteration. No behavior changes are introduced.
+
+1. Permissive auth check in upstream:
+
+- In `upstream-opencarwings/tculink/management/commands/tcuserver.py`, auth accepts if username matches **or** password hash matches.
+- This is more permissive than typical username+password pair validation.
+
+2. Sensitive data exposure risk in logs:
+
+- Upstream logs include full `TCU Payload hex` and `Auth Data`.
+- Those fields may expose credential material or sensitive identifiers.
+
+3. Field disagreement in telemetry:
+
+- Protocol fields (`resultstate`, `alertstate`) and interpreted booleans (`pluggedin`, `not_plugin_alert`) can disagree in real packets.
+- Diagnostics should explicitly surface disagreement instead of assuming full consistency.
+
+## Why UI Shows `Charge start ... 0,2`
+
+This comes from upstream `charge_result` handling in `tcuserver.py`:
+
+1. When `body_type == "charge_result"`, upstream creates `AlertHistory` with:
+
+- `new_alert.type = 2` (charge start)
+- `new_alert.additional_data = f"{req_body['resultstate']},{req_body['alertstate']}"`
+
+2. The UI row `Charge start ... 0,2` means:
+
+- first value (`0`) = `resultstate`
+- second value (`2`) = `alertstate`
+
+3. Important implication:
+
+- Even when the car is unplugged, upstream may still emit `type=2` if the packet is `charge_result`.
+- In other words, this UI line reflects upstream alert typing plus raw protocol tuple, not a definitive physical plug validation.
+
+---
+
+## Charge-Result App Message Policy
+
+- Upstream alert typing remains unchanged:
+  - `charge_result` creates alert type `2`.
+- Addon final app message is hybrid-informative:
+  - If unplugged indicators are present (`resultstate == 17` OR `not_plugin_alert == true` OR `pluggedin == false`):
+    - `Charge command response: vehicle appears unplugged; charging may not start`
+  - Otherwise:
+    - `Charge command response received`
+- Message always appends protocol/debug context:
+  - `resultstate`, `alertstate`, `pluggedin`, `not_plugin_alert`, `charge_request_result`.
+
+---
+
+## Webhook for SMS Delivery Confirmation
+
+Purpose:
+
+- Optional standalone webhook endpoint to log inbound SMS delivery confirmations from Monogoto.
+
+Endpoint:
+
+- `POST /api/webhook/monogoto/sms-delivery/`
+
+Token model:
+
+- URL token query parameter is required when enabled:
+  - fixed token: `?token=ocw`
+
+Optional behavior:
+
+- If webhook feature is not enabled, endpoint returns `204` silently.
+- If enabled with invalid token, endpoint returns `403` silently.
+
+Payload parsing:
+
+- Supports both JSON object and JSON array payloads.
+- Parsed payload is logged at debug level for traceability.
+
+Car matching:
+
+- ICCID-only matching:
+  - webhook payload ICCID -> `Car.iccid`
+- Monogoto ICCID tolerance:
+  - if webhook ICCID differs by one trailing digit, prefix-based +/-1 digit matching is applied.
+- If matched:
+  - logs info line: `Monogoto webhook: SMS delivered`.
+- If unmatched:
+  - logs debug line with unknown ICCID.
+
+Monogoto setup URL template:
+
+- `https://ocw-ha.duckdns.org:8125/api/webhook/monogoto/sms-delivery/?token=ocw`
+
+---
+
+## Validation Scenarios
+
+1. `charge_result` with `resultstate=17`:
+
+- Expect alert type `2`.
+
+2. `charge_result` with `resultstate=0` and `pluggedin=false`:
+
+- Expect alert type `2`.
+- Expect conflict detail in `[app]` line.
+
+3. `ac_result` unknown state:
+
+- Expect alert type `97`.
+
+4. `ac_result` with `resultstate=16` during A/C Off command:
+
+- Addon summary log should report: `A/C already off (no action needed)`.
+- This is treated as informational summary output (not error-level summary).
+
+5. `remote_stop` with `alertstate=8`:
+
+- Expect alert type `8`.
+
+6. Logging parity:
+
+- Confirm both upstream-origin `logger.info(...)` lines tagged `[tcuserver]` and addon-generated lines tagged `[app]` appear in addon logs.

@@ -64,13 +64,13 @@ else
 fi
 
 # --- Patch 3: Force Colorized Console Logging & Dynamic Debug Level ---
-LOGGING_PATCH_MARKER="# --- OpenCarwings Logging Patch V2 ---"
+LOGGING_PATCH_MARKER="# --- OpenCarwings Logging Patch V5 ---"
 
 if ! grep -q "$LOGGING_PATCH_MARKER" "$SETTINGS_FILE"; then
-    bashio::log.info "Patching settings.py for Colorized Console Logging (V2)..."
+    bashio::log.info "Patching settings.py for Colorized Console Logging (V5)..."
     cat <<'EOF' >> "$SETTINGS_FILE"
 
-# --- OpenCarwings Logging Patch V2 ---
+# --- OpenCarwings Logging Patch V5 ---
 import os
 import sys
 import logging
@@ -95,26 +95,33 @@ class AppColorFormatter(logging.Formatter):
     COLORS = {'DEBUG': '35', 'INFO': '32', 'WARNING': '33', 'ERROR': '31', 'CRITICAL': '1;31'}
     def format(self, record):
         color = self.COLORS.get(record.levelname, '0')
-        # Differentiator: tag the message
-        if "daphne" in record.name:
-            tag = "[daphne]"
-        elif "tculink" in record.name:
-            tag = "[app]"
-        else:
-            tag = "[django]"
         
         # Ensure message is a string for tagging
         msg = str(record.msg)
         if record.args:
             msg = msg % record.args
         
-        if "[" == msg[0] and "]" in msg:
+        # 1) Explicit in-message prefix always wins
+        if msg and msg[0] == "[" and "]" in msg:
             tag = msg[:msg.find("]")+1]
             msg = msg[msg.find("]")+1:].strip()
         elif " - - [" in msg:
             # Daphne Access Log detected: '127.0.0.1:39728 - - [14/Feb/2026:13:54:29] "GET /api/car/" 200 804'
             tag = "[daphne]"
             msg = msg.strip()
+        # 2) Source-based default tags
+        elif "tculink.management.commands.tcuserver" in record.name:
+            tag = "[tcuserver]"
+        elif "tculink" in record.name:
+            tag = "[app]"
+        elif "daphne" in record.name:
+            tag = "[daphne]"
+        else:
+            tag = "[django]"
+
+        # Show upstream tcuserver INFO lines as DEBUG to reduce user-facing noise.
+        if tag == "[tcuserver]" and record.levelname == "INFO":
+            record.levelname = "DEBUG"
         
         # Color mapping by level (as requested, revert tag-based overrides)
         color = self.COLORS.get(record.levelname, color)
@@ -248,12 +255,12 @@ fi
 
 # --- Patch 5: Instrument TCUserver for Debugging & Error Escalation ---
 TCUSERVER_FILE="/opt/opencarwings/tculink/management/commands/tcuserver.py"
-TC_INSTRUMENT_MARKER="# --- OpenCarwings Instrumentation Patch V10 ---"
+TC_INSTRUMENT_MARKER="# --- OpenCarwings Instrumentation Patch V17 ---"
 
-# Check if file exists and hasn't been V9-patched yet
+# Check if file exists and hasn't been V16-patched yet
 if [ -f "$TCUSERVER_FILE" ]; then
     if ! grep -q "$TC_INSTRUMENT_MARKER" "$TCUSERVER_FILE"; then
-        bashio::log.info "Instrumenting tcuserver.py with V9 Unified Logging..."
+        bashio::log.info "Instrumenting tcuserver.py with V17 Unified Logging..."
         python3 - <<'EOF'
 import sys
 import os
@@ -262,12 +269,11 @@ file_path = "/opt/opencarwings/tculink/management/commands/tcuserver.py"
 with open(file_path, 'r') as f:
     lines = f.readlines()
 
-new_lines = [ "# --- OpenCarwings Instrumentation Patch V10 ---\n" ]
+new_lines = [ "# --- OpenCarwings Instrumentation Patch V17 ---\n" ]
 CMD_MAP = '{1: "Refresh data", 2: "Start Charge", 3: "AC On", 4: "AC Off", 5: "Read TCU Config", 6: "Set Auth"}'
 
 connection_logged_injected = False
 in_charge_result = False
-comment_depth = 0
 
 for i, line in enumerate(lines):
     indent = line[:len(line) - len(line.lstrip())]
@@ -275,73 +281,44 @@ for i, line in enumerate(lines):
     # 0. Initialize flags at start of handle_client loop/function
     if "authenticated = False" in line and not connection_logged_injected:
         new_lines.append(line)
-        new_lines.append(f"{indent}connection_logged = False\n")
-        new_lines.append(f"{indent}auth_logged = False\n")
+        new_lines.append(f"{indent}refresh_completion_pending = False\n")
+        new_lines.append(f"{indent}refresh_completion_message = None\n")
         new_lines.append(f"{indent}CMD_MAP = {CMD_MAP}\n")
         connection_logged_injected = True
         continue
 
-    # 1. Comment out basicConfig and print/stdout.write
-    targets = ["logging.basicConfig(", "self.stdout.write(", "print("]
-    if any(t in line for t in targets) and "logger" not in line and comment_depth == 0:
-        comment_depth = line.count('(') - line.count(')')
-        new_lines.append(f"{indent}# {line.lstrip()}")
-        if comment_depth == 0: continue
-        continue
-    
-    # V10 Logging Refinements (Comprehensive Alerts & No Emojis)
-    if comment_depth > 0:
-        new_lines.append(f"{indent}# {line.lstrip()}")
-        comment_depth += line.count('(') - line.count(')')
-        if comment_depth <= 0: comment_depth = 0
-        continue
-
-    # 1.1 Auth Bypass Log -> DEBUG
+    # 1.1 Keep upstream auth status line; no addon bypass noise
     if "TCU Authentication check status:" in line:
-        new_lines.append(f"{indent}bypass_msg = f\"Auth bypass enabled (disable_auth=True)\" if authenticated else f\"Auth required (disable_auth=False)\"\n")
-        new_lines.append(f"{indent}logger.debug(bypass_msg)\n")
+        new_lines.append(line)
         continue
 
-    # 2. Downgrade verbose INFO logs to DEBUG & Inject Summaries
-    
-    # TCU Info -> Removed (Merged into check-in log)
-    if 'logger.info(f"TCU Info:' in line:
-        continue
-
-    # GPS Data -> Removed (Redundant)
-    if 'logger.info(f"GPS Data:' in line:
-        continue
-
-    # Auth Data -> Removed (Redundant, keep Authenticated summary)
-    if 'logger.info(f"Auth Data:' in line:
-        new_lines.append(f"{indent}if parsed_data.get('auth') and not auth_logged:\n")
-        new_lines.append(f"{indent}    logger.debug(f\"Authenticated: {{parsed_data['auth'].get('user', '?')}}\")\n")
-        new_lines.append(f"{indent}    auth_logged = True\n")
-        continue
-
-    # 2.1 Always log full parsed data at DEBUG
+    # 2.1 Keep parser call intact; emit parsed payload after payload hex line
     if 'parsed_data = parse_gdc_packet(data)' in line:
         new_lines.append(line)
-        new_lines.append(f"{indent}logger.debug(f\"Raw Parsed Data: {{parsed_data}}\")\n")
-        new_lines.append(f"{indent}if parsed_data.get('message_type') == (3, 'DATA') and getattr(car, 'pending_refresh_feedback', False):\n")
-        new_lines.append(f"{indent}    logger.info(f\"Refresh data completed for {{car.nickname}}\")\n")
-        new_lines.append(f"{indent}    car.pending_refresh_feedback = False\n")
         continue
 
-    # Body Type -> Removed (Redundant)
-    if 'logger.info(f"Body Type:' in line:
+    if 'logger.info(f"TCU Payload hex:' in line:
+        new_lines.append(line)
+        new_lines.append(f"{indent}logger.debug(f\"[app] Raw Parsed Data: {{parsed_data}}\")\n")
         continue
 
-    # 2.2 Refine Charge Result Status (Differentiate Unplugged)
+    # 2.2 Keep charge_result alert mapping aligned with upstream
     if 'if body_type == "charge_result":' in line:
         in_charge_result = True
     
     if in_charge_result and "new_alert.type = 2" in line:
-        new_lines.append(f"{indent}new_alert.type = 3 if req_body.get('resultstate') == 17 else 2\n")
+        new_lines.append(f"{indent}new_alert.type = 2\n")
         in_charge_result = False
         continue
         
     if 'logger.info("Connection closed")' in line:
+        new_lines.append(f"{indent}try:\n")
+        new_lines.append(f"{indent}    if refresh_completion_pending and refresh_completion_message:\n")
+        new_lines.append(f"{indent}        logger.info(refresh_completion_message)\n")
+        new_lines.append(f"{indent}        refresh_completion_pending = False\n")
+        new_lines.append(f"{indent}        refresh_completion_message = None\n")
+        new_lines.append(f"{indent}except Exception:\n")
+        new_lines.append(f"{indent}    pass\n")
         new_lines.append(line.replace("logger.info", "logger.debug"))
         continue
 
@@ -350,8 +327,9 @@ for i, line in enumerate(lines):
         new_lines.append(line)
         continue
 
-    # 4. Inject Config Summary (Removed manual injection, now handled by Alerts)
+    # 4. Keep upstream config log line as-is (summary emitted via alert mapping)
     if 'logger.info(f"Car Config:' in line:
+        new_lines.append(line)
         continue
 
     # 4. Inject Comprehensive Alert Logging
@@ -372,11 +350,16 @@ for i, line in enumerate(lines):
         new_lines.append(f"{indent}_b_type = parsed_data.get('body_type')\n")
         new_lines.append(f"{indent}r_state = _body.get('resultstate') if isinstance(_body, dict) else None\n")
         new_lines.append(f"{indent}a_state = _body.get('alertstate') if isinstance(_body, dict) else None\n")
+        new_lines.append(f"{indent}plugged_state = _body.get('pluggedin') if isinstance(_body, dict) else None\n")
+        new_lines.append(f"{indent}not_plugin_alert = _body.get('not_plugin_alert') if isinstance(_body, dict) else None\n")
+        new_lines.append(f"{indent}charge_request_result = _body.get('charge_request_result') if isinstance(_body, dict) else None\n")
+        new_lines.append(f"{indent}pri_ac_stop_result = _body.get('pri_ac_stop_result') if isinstance(_body, dict) else None\n")
         
         new_lines.append(f"{indent}if _b_type == 'ac_result':\n")
         new_lines.append(f"{indent}    if r_state == 64: detail_msg = 'A/C Started successfully'\n")
         new_lines.append(f"{indent}    elif r_state == 32: detail_msg = 'A/C Stopped successfully'\n")
         new_lines.append(f"{indent}    elif r_state == 192: detail_msg = 'A/C Finished / Auto-off'\n")
+        new_lines.append(f"{indent}    elif r_state == 16 and (pri_ac_stop_result == 1 or getattr(car, 'command_type', None) == 4): detail_msg = 'A/C already off (no action needed)'\n")
         new_lines.append(f"{indent}    else: detail_msg = f'A/C Error/Unknown (State {{r_state}})'\n")
         
         new_lines.append(f"{indent}elif _b_type == 'remote_stop':\n")
@@ -385,17 +368,27 @@ for i, line in enumerate(lines):
         new_lines.append(f"{indent}    else: detail_msg = f'A/C Finished / Default (State {{a_state}})'\n")
         
         new_lines.append(f"{indent}elif _b_type == 'charge_result':\n")
-        new_lines.append(f"{indent}    if r_state == 17: detail_msg = 'Vehicle Unplugged (Cable Reminder)'\n")
-        new_lines.append(f"{indent}    else: detail_msg = f'Charge Started (State {{r_state}})'\n")
+        new_lines.append(f"{indent}    unplugged = (r_state == 17) or (not_plugin_alert is True) or (plugged_state is False)\n")
+        new_lines.append(f"{indent}    if unplugged:\n")
+        new_lines.append(f"{indent}        detail_msg = 'Charge command response: vehicle appears unplugged; charging may not start'\n")
+        new_lines.append(f"{indent}    else:\n")
+        new_lines.append(f"{indent}        detail_msg = 'Charge command response received'\n")
+        new_lines.append(f"{indent}    detail_msg += f\" (resultstate={{r_state}}, alertstate={{a_state}}, pluggedin={{plugged_state}}, not_plugin_alert={{not_plugin_alert}}, charge_request_result={{charge_request_result}})\"\n")
         
-        new_lines.append(f"{indent}msg = ALERT_MAP.get(new_alert.type, f'SYSTEM ALERT [Type {{new_alert.type}}]')\n")
+        new_lines.append(f"{indent}if _b_type == 'ac_result' and r_state == 16:\n")
+        new_lines.append(f"{indent}    msg = 'A/C off'\n")
+        new_lines.append(f"{indent}else:\n")
+        new_lines.append(f"{indent}    msg = ALERT_MAP.get(new_alert.type, f'SYSTEM ALERT [Type {{new_alert.type}}]')\n")
         new_lines.append(f"{indent}if detail_msg:\n")
         new_lines.append(f"{indent}    msg += f': {{detail_msg}}'\n")
         new_lines.append(f"{indent}elif new_alert.additional_data:\n")
         new_lines.append(f"{indent}    msg += f': {{new_alert.additional_data}}'\n")
         
-        new_lines.append(f"{indent}alert_logger = logger.error if new_alert.type >= 96 else logger.info\n")
-        new_lines.append(f"{indent}alert_logger(msg)\n")
+        new_lines.append(f"{indent}if _b_type == 'ac_result' and r_state == 16:\n")
+        new_lines.append(f"{indent}    alert_logger = logger.info\n")
+        new_lines.append(f"{indent}else:\n")
+        new_lines.append(f"{indent}    alert_logger = logger.error if new_alert.type >= 96 else logger.info\n")
+        new_lines.append(f"{indent}alert_logger(f\"[app] {{msg}}\")\n")
     
     # 5. Fix AlertHistory save() bug
     if "new_alert.command_id = car.command_id" in line:
@@ -411,21 +404,32 @@ for i, line in enumerate(lines):
 
     # 6. Save Confirmation (No Emoji)
     if "Car state saved" in line and "logger.info" in line:
-        new_lines.append(f"{indent}logger.info(f\"Car state saved to database for VIN: {{car.vin}}\")\n")
+        new_lines.append(f"{indent}logger.info(f\"[app] Car state saved to database for VIN: {{car.vin}}\")\n")
         continue
 
     # 7. Command Parsing (No Emoji)
     if "Command found:" in line:
         cmd_name = 'CMD_MAP.get(car.command_type, "Unknown")'
         new_lines.append(f"{indent}if car.command_type == 1: car.pending_refresh_feedback = True\n")
-        # Consolidated delivery log as requested by user
-        new_lines.append(f"{indent}logger.info(f\"Vehicle connected: {{ {cmd_name} }} command delivered\")\n")
-        new_lines.append(f"{indent}# {line.lstrip()}")
+        new_lines.append(line)
+        # Consolidated delivery log appears after upstream command-found line
+        new_lines.append(f"{indent}logger.info(f\"[app] Vehicle connected: {{ {cmd_name} }} command delivered\")\n")
         continue
 
     if 'logger.info("No command or another in progress, send success false")' in line:
-        new_lines.append(f"{indent}logger.info(f\"Vehicle check-in: {{car.nickname}} (VIN: {{car.vin}})\")\n")
-        new_lines.append(f"{indent}# {line.lstrip()}")
+        new_lines.append(f"{indent}logger.info(f\"[app] Vehicle check-in: {{car.nickname}} (VIN: {{car.vin}})\")\n")
+        new_lines.append(line)
+        continue
+
+    # Keep upstream Body Type log as-is and arm refresh-complete tail log.
+    if 'logger.info(f"Body Type: {body_type}")' in line:
+        new_lines.append(line)
+        new_lines.append(f"{indent}try:\n")
+        new_lines.append(f"{indent}    if body_type == 'charge_status' and getattr(car, 'command_type', None) == 1:\n")
+        new_lines.append(f"{indent}        refresh_completion_pending = True\n")
+        new_lines.append(f"{indent}        refresh_completion_message = f\"[app] Refresh data command completed for {{car.nickname}} (VIN: {{car.vin}})\"\n")
+        new_lines.append(f"{indent}except Exception:\n")
+        new_lines.append(f"{indent}    pass\n")
         continue
 
     # 8. Patch error handler: reset command_result on processing failure
@@ -436,7 +440,7 @@ for i, line in enumerate(lines):
         new_lines.append(f"{indent}        car.command_result = 1\n")
         new_lines.append(f"{indent}        car.command_requested = False\n")
         new_lines.append(f"{indent}        await sync_to_async(car.save)()\n")
-        new_lines.append(f"{indent}        logger.warning(f\"Command state reset to FAILED for {{car.nickname}} due to processing error\")\n")
+        new_lines.append(f"{indent}        logger.warning(f\"[app] Command state reset to FAILED for {{car.nickname}} due to processing error\")\n")
         new_lines.append(f"{indent}except: pass\n")
         continue
 
@@ -446,7 +450,7 @@ with open(file_path, 'w') as f:
     f.writelines(new_lines)
 EOF
     else
-        bashio::log.info "tcuserver.py already patched with V10+ logging."
+        bashio::log.info "tcuserver.py already patched with V17+ logging."
     fi
 else
     bashio::log.warning "tcuserver.py not found, skipping instrumentation."
@@ -454,7 +458,7 @@ fi
 
 # --- Patch 6: Instrument api/views.py for Command Initiation ---
 VIEWS_FILE="/opt/opencarwings/api/views.py"
-VIEWS_PATCH_MARKER="# --- OpenCarwings Command Init Patch ---"
+VIEWS_PATCH_MARKER="# --- OpenCarwings Command Init Patch V2 ---"
 
 if [ -f "$VIEWS_FILE" ]; then
     if ! grep -q "$VIEWS_PATCH_MARKER" "$VIEWS_FILE"; then
@@ -466,7 +470,7 @@ file_path = "/opt/opencarwings/api/views.py"
 with open(file_path, 'r') as f:
     lines = f.readlines()
 
-new_lines = [ "# --- OpenCarwings Command Init Patch ---\n" ]
+new_lines = [ "# --- OpenCarwings Command Init Patch V2 ---\n" ]
 for line in lines:
     indent = line[:len(line) - len(line.lstrip())]
     
@@ -477,7 +481,7 @@ for line in lines:
         new_lines.append(f"{indent}CMD_MAP = {{1: 'Refresh data', 2: 'Start Charge', 3: 'A/C On', 4: 'A/C Off', 5: 'Read TCU config', 6: 'Set Auth'}}\n")
         new_lines.append(f"{indent}try:\n")
         new_lines.append(f"{indent}    c_name = CMD_MAP.get(int(command_type), f'Type {{command_type}}')\n")
-        new_lines.append(f"{indent}    logger.info(f\"{{c_name}} command initiated for {{car.nickname}} (VIN: {{vin}})\")\n")
+        new_lines.append(f"{indent}    logger.info(f\"[app] {{c_name}} command initiated for {{car.nickname}} (VIN: {{vin}})\")\n")
         new_lines.append(f"{indent}except: pass\n")
         continue
     
@@ -493,7 +497,177 @@ else
     bashio::log.warning "api/views.py not found, skipping instrumentation."
 fi
 
-# --- Patch 7: Clear stale commands on startup ---
+# --- Patch 7: Add optional Monogoto SMS delivery webhook endpoint ---
+WEBHOOK_PATCH_MARKER="# --- OpenCarwings Monogoto Webhook Patch V10 ---"
+API_VIEWS_FILE="/opt/opencarwings/api/views.py"
+URLS_FILE="/opt/opencarwings/carwings/urls.py"
+
+if [ -f "$API_VIEWS_FILE" ] && [ -f "$URLS_FILE" ]; then
+    if ! grep -q "$WEBHOOK_PATCH_MARKER" "$API_VIEWS_FILE"; then
+        bashio::log.info "Patching API for Monogoto SMS delivery webhook..."
+        python3 - <<'EOF'
+import re
+
+api_views_path = "/opt/opencarwings/api/views.py"
+urls_path = "/opt/opencarwings/carwings/urls.py"
+marker = "# --- OpenCarwings Monogoto Webhook Patch V10 ---"
+
+with open(api_views_path, "r", encoding="utf-8") as f:
+    api_views = f.read()
+
+# Backward-compatibility cleanup:
+# Older patch versions injected @permission_classes without importing the decorator.
+api_views = api_views.replace("@permission_classes([permissions.AllowAny])\n", "")
+
+if marker not in api_views:
+    webhook_func = f"""
+
+{marker}
+@api_view(['POST'])
+def monogoto_sms_delivery_webhook(request):
+    import json
+    import logging
+    import os
+    import re
+    from datetime import datetime, UTC
+
+    logger = logging.getLogger('tculink')
+    enabled = os.getenv("MONOGOTO_SMS_DELIVERY_WEBHOOK_ENABLED", "false").lower() == "true"
+    if not enabled:
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    expected_token = (os.getenv("MONOGOTO_SMS_DELIVERY_WEBHOOK_TOKEN", "ocw") or "ocw").strip()
+    provided_token = (request.query_params.get("token", "") if hasattr(request, "query_params") else "").strip()
+    if provided_token != expected_token:
+        return Response(status=status.HTTP_403_FORBIDDEN)
+
+    content_type = request.headers.get("Content-Type", "")
+    raw_body_bytes = request.body or b""
+    raw_body_text = raw_body_bytes.decode("utf-8", errors="replace")
+
+    try:
+        parsed = request.data
+    except Exception:
+        logger.debug("[app] Monogoto webhook: request.data parsing failed")
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+
+    if isinstance(parsed, dict):
+        payload = parsed
+    elif isinstance(parsed, list):
+        payload = parsed
+    elif raw_body_text.strip():
+        try:
+            payload = json.loads(raw_body_text)
+        except Exception:
+            payload = {{}}
+    else:
+        payload = {{}}
+
+    logger.debug(f"[app] Monogoto webhook payload: {{payload}}")
+    if payload in ({{}}, [], None):
+        logger.debug(f"[app] Monogoto webhook payload empty after parsing (content-type: {{content_type}})")
+
+    received_at = datetime.now(UTC).isoformat(timespec="seconds")
+
+    def _find_first(data, keys):
+        if isinstance(data, dict):
+            for k, v in data.items():
+                lk = str(k).lower()
+                if lk in keys and v not in (None, ""):
+                    return v
+                found = _find_first(v, keys)
+                if found not in (None, ""):
+                    return found
+        elif isinstance(data, list):
+            for item in data:
+                found = _find_first(item, keys)
+                if found not in (None, ""):
+                    return found
+        return None
+
+    text_val = _find_first(payload, {{"text", "message", "description", "body"}})
+    title_val = _find_first(payload, {{"title"}})
+    desc_val = _find_first(payload, {{"description"}})
+
+    payload_time = _find_first(payload, {{"time", "timestamp", "event_time", "created_at"}})
+    if not payload_time and isinstance(text_val, str):
+        m_time = re.search(r"Time:\\s*([^,]+,\\s*\\d{{2}}:\\d{{2}})", text_val, flags=re.IGNORECASE)
+        if m_time:
+            payload_time = m_time.group(1).strip()
+
+    status_or_event = _find_first(payload, {{"status", "event", "event_type", "state", "delivery_status", "title", "result"}}) or "unknown"
+    if status_or_event == "unknown":
+        haystack = " ".join([str(v) for v in [title_val, desc_val, text_val] if v]).lower()
+        if "success" in haystack or "delivered" in haystack:
+            status_or_event = "success"
+        elif "fail" in haystack or "error" in haystack:
+            status_or_event = "failed"
+
+    iccid = _find_first(payload, {{"iccid"}})
+    thing = _find_first(payload, {{"thingid", "thing_id", "thing"}})
+    if not iccid and isinstance(thing, str):
+        m = re.search(r"ICCID_(\\d+)", thing)
+        if m:
+            iccid = m.group(1)
+    if not iccid and isinstance(text_val, str):
+        m = re.search(r"ICCID[:\\s]+(\\d+)", text_val, flags=re.IGNORECASE)
+        if m:
+            iccid = m.group(1)
+
+    if not iccid:
+        logger.debug(f"[app] Monogoto webhook: SMS delivery event received (status: {{status_or_event}}, iccid: missing, received_at: {{received_at}}, payload_time: {{payload_time}})")
+        return Response(status=status.HTTP_200_OK)
+
+    iccid = str(iccid).strip()
+    norm_iccid = re.sub(r"\\D", "", iccid)
+
+    car = Car.objects.filter(iccid=norm_iccid).first()
+    if not car and norm_iccid:
+        for candidate in Car.objects.exclude(iccid__isnull=True).all():
+            cand_iccid = re.sub(r"\\D", "", candidate.iccid or "")
+            # Monogoto can report ICCID missing one trailing digit; allow +/-1 trailing-digit tolerance.
+            if cand_iccid == norm_iccid:
+                car = candidate
+                break
+            if len(cand_iccid) == len(norm_iccid) + 1 and cand_iccid.startswith(norm_iccid):
+                car = candidate
+                break
+            if len(norm_iccid) == len(cand_iccid) + 1 and norm_iccid.startswith(cand_iccid):
+                car = candidate
+                break
+    if car:
+        logger.info("[app] Monogoto webhook: SMS delivered")
+    else:
+        logger.debug(f"[app] Monogoto webhook: event received for unknown ICCID {{iccid}} (status: {{status_or_event}}, received_at: {{received_at}}, payload_time: {{payload_time}})")
+
+    return Response(status=status.HTTP_200_OK)
+
+# DRF function-view auth/permission setup without decorator imports
+monogoto_sms_delivery_webhook.cls.authentication_classes = []
+monogoto_sms_delivery_webhook.cls.permission_classes = [permissions.AllowAny]
+"""
+    api_views = api_views.rstrip() + "\n" + webhook_func.strip("\n") + "\n"
+    with open(api_views_path, "w", encoding="utf-8") as f:
+        f.write(api_views)
+
+with open(urls_path, "r", encoding="utf-8") as f:
+    urls_content = f.read()
+
+url_line = "    path('api/webhook/monogoto/sms-delivery/', api_views.monogoto_sms_delivery_webhook, name='monogoto_sms_delivery_webhook'),"
+if "monogoto_sms_delivery_webhook" not in urls_content:
+    insert_after = "    path('api/command/<str:vin>/', api_views.command_api, name='command_api'),"
+    urls_content = urls_content.replace(insert_after, insert_after + "\n" + url_line)
+    with open(urls_path, "w", encoding="utf-8") as f:
+        f.write(urls_content)
+EOF
+    else
+        bashio::log.info "Monogoto webhook patch already applied."
+    fi
+else
+    bashio::log.warning "api/views.py or carwings/urls.py not found, skipping Monogoto webhook patch."
+fi
+
+# --- Patch 8: Clear stale commands on startup ---
 # If the addon restarted while a command was in "delivered, awaiting response"
 # state (command_result=3), it will be stuck forever. Reset them to "failed" (1).
 bashio::log.info "Checking for stale commands stuck in delivered state..."
@@ -518,4 +692,3 @@ else:
     logger = logging.getLogger('tculink')
     logger.info("Startup cleanup: no stale commands found")
 EOF
-

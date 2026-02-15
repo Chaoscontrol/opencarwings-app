@@ -34,11 +34,13 @@ fi
 # - Listen on 8124 (HTTP) -> Redirect Browsers to HTTPS, Proxy others (TCU) to 8000
 # - Listen on 8125 (HTTPS) -> Proxy all to 8000
 cat > /etc/nginx/http.d/default.conf <<EOF
+log_format ocw '\$remote_addr "\$request" \$status \$body_bytes_sent "\$http_referer" "\$http_user_agent"';
+
 server {
     listen 8124;
     server_name _;
     
-    access_log /dev/stdout;
+    access_log /dev/stdout ocw;
     error_log /dev/stderr warn;
 
     # Redirect Browsers to HTTPS on port 8125
@@ -70,7 +72,7 @@ server {
     listen 8125 ssl;
     server_name _;
 
-    access_log /dev/stdout;
+    access_log /dev/stdout ocw;
     error_log /dev/stderr warn;
 
     ssl_certificate $CERT_FILE;

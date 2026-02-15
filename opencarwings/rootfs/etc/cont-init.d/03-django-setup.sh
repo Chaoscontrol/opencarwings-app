@@ -8,6 +8,25 @@ cd /opt/opencarwings
 export TZ=$(bashio::config 'timezone' 'UTC')
 export LOG_LEVEL=$(bashio::config 'log_level' 'info')
 export ACTIVATION_SMS_MESSAGE="NISSAN_EVIT_TELEMATICS_CENTER"
+export MONOGOTO_SMS_DELIVERY_WEBHOOK_ENABLED=$(bashio::config 'monogoto_sms_delivery_webhook_enabled' 'false')
+export MONOGOTO_SMS_DELIVERY_WEBHOOK_TOKEN="ocw"
+
+# Show copy-ready Monogoto webhook URL(s) when feature is enabled.
+if [ "$MONOGOTO_SMS_DELIVERY_WEBHOOK_ENABLED" = "true" ]; then
+    DOMAIN_COUNT=$(bashio::config 'trusted_domains | length')
+    if [ "$DOMAIN_COUNT" -gt 0 ]; then
+        bashio::log.info "Monogoto SMS delivery webhook is enabled. Use one of these URLs in Monogoto:"
+        for (( i=0; i<DOMAIN_COUNT; i++ )); do
+            domain=$(bashio::config "trusted_domains[${i}]")
+            if [ -n "$domain" ]; then
+                WEBHOOK_URL="https://${domain}:8125/api/webhook/monogoto/sms-delivery/?token=${MONOGOTO_SMS_DELIVERY_WEBHOOK_TOKEN}"
+                bashio::log.info $'\033[34m'"${WEBHOOK_URL}"$'\033[0m'
+            fi
+        done
+    else
+        bashio::log.warning "Monogoto webhook enabled but trusted_domains is empty, cannot print webhook URL."
+    fi
+fi
 
 # Ensure persistent logs directory
 if [ ! -L "logs" ]; then
