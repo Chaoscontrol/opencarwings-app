@@ -37,6 +37,9 @@ cat > /etc/nginx/http.d/default.conf <<EOF
 server {
     listen 8124;
     server_name _;
+    
+    access_log /dev/stdout;
+    error_log /dev/stderr warn;
 
     # Redirect Browsers to HTTPS on port 8125
     if (\$http_user_agent ~* "Mozilla|Chrome|Safari|Edge|Firefox") {
@@ -67,6 +70,9 @@ server {
     listen 8125 ssl;
     server_name _;
 
+    access_log /dev/stdout;
+    error_log /dev/stderr warn;
+
     ssl_certificate $CERT_FILE;
     ssl_certificate_key $KEY_FILE;
 
@@ -92,4 +98,35 @@ server {
 }
 EOF
 
-exec nginx -g "daemon off;"
+# Source bashio log enhancements
+source /etc/cont-init.d/00-log-fix.sh
+
+# Generate dynamic Nginx configuration
+# ... (Nginx config generation) ...
+# (cat > /etc/nginx/http.d/default.conf <<EOF ... EOF already handled)
+
+bashio::log.info "Nginx configured. Starting and monitoring logs..."
+
+# Wait for Daphne to be ready (prevent 111: Connection refused)
+bashio::log.info "Waiting for OpenCarwings backend to start..."
+timeout=30
+while ! nc -z 127.0.0.1 8000; do
+    timeout=$((timeout - 1))
+    if [ $timeout -eq 0 ]; then
+        bashio::log.error "Timed out waiting for OpenCarwings backend!"
+        break
+    fi
+    sleep 1
+done
+bashio::log.info "Backend is ready. Starting Nginx..."
+
+# Start nginx and handle its output
+# We pipe access/error logs through bashio log cleaners to match standard format
+nginx -g "daemon off;" 2>&1 | while read -r line; do
+    if [[ "$line" == *"[error]"* ]]; then
+        bashio::log.error "$line" "nginx"
+    else
+        # Regular access logs or other info
+        bashio::log.debug "$line" "nginx"
+    fi
+done

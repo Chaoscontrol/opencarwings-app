@@ -1,3 +1,9 @@
-#!/bin/sh
-echo "[DEBUG] Starting healthcheck service..." >&2
-python /opt/opencarwings/healthcheck.py 2>&1 || echo "[ERROR] Healthcheck failed to start" >&2
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+
+# --- Unified Logging Fix ---
+# shellcheck source=/etc/cont-init.d/00-log-fix.sh
+source /etc/cont-init.d/00-log-fix.sh
+
+bashio::log.info "Starting healthcheck service..."
+exec python3 /opt/opencarwings/healthcheck.py 2>&1

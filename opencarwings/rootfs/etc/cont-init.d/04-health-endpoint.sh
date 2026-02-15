@@ -1,5 +1,6 @@
 #!/command/with-contenv bashio
 # shellcheck shell=bash
+source /etc/cont-init.d/00-log-fix.sh
 
 # Create a simple standalone health check script
 cat > /opt/opencarwings/healthcheck.py << 'EOF'
@@ -23,12 +24,16 @@ class HealthHandler(BaseHTTPRequestHandler):
         pass  # Suppress logs
 
 try:
+    import datetime
+    def log(level, msg, color="32"):
+        now = datetime.datetime.now().strftime("%H:%M:%S")
+        print(f"[{now}] \033[{color}m{level}: {msg}\033[0m", flush=True)
+
     server = HTTPServer(('0.0.0.0', 8899), HealthHandler)
-    print('[INFO] Health check server started on port 8899', flush=True)
-    sys.stdout.flush()
+    log('INFO', 'Health check server started on port 8899')
     server.serve_forever()
 except Exception as e:
-    print(f'[ERROR] Health check server failed: {e}', flush=True)
+    log('ERROR', f'Health check server failed: {e}', color="31")
     sys.exit(1)
 EOF
 

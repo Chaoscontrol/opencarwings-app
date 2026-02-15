@@ -1,6 +1,10 @@
 #!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
 
+# --- Unified Logging Fix ---
+# shellcheck source=/etc/cont-init.d/00-log-fix.sh
+source /etc/cont-init.d/00-log-fix.sh
+
 cd /opt/opencarwings || exit 1
 
 bashio::log.info "Starting OpenCarwings TCU Socket Server..."

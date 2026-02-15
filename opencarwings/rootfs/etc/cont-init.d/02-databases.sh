@@ -1,5 +1,6 @@
 #!/command/with-contenv bashio
 # shellcheck shell=bash
+source /etc/cont-init.d/00-log-fix.sh
 
 bashio::log.info "=== Starting PostgreSQL and Redis Setup ==="
 

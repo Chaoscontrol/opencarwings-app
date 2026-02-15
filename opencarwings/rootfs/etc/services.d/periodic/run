@@ -1,6 +1,10 @@
 #!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
 
+# --- Unified Logging Fix ---
+# shellcheck source=/etc/cont-init.d/00-log-fix.sh
+source /etc/cont-init.d/00-log-fix.sh
+
 cd /opt/opencarwings || exit 1
 
 # Wait for Django setup to complete
@@ -22,13 +26,13 @@ HEARTBEAT_INTERVAL=60  # Log heartbeat every 60 cycles (60 × 60s = 1 hour)
 while true; do
   # Run periodic update — capture output for error/event logging
   # Filter out noise: "Starting data refresh process", "No command timeouts found", etc.
-  UPDATE_OUT=$(python3 manage.py tcuperiodicupdate 2>&1 | grep -vE "Starting data refresh process|No command timeouts found|No pending timers found|No pending car refreshes found|Processing [0-9]+ cars") || true
+  UPDATE_OUT=$(python3 manage.py tcuperiodicupdate 2>&1 | grep -vE "Starting data refresh process|No command timeouts found|No pending timers found|No pending car refreshes found|Processing [0-9]+ cars|Using selector: EpollSelector") || true
   if [ -n "$UPDATE_OUT" ] && [ "$UPDATE_OUT" != "" ]; then
     bashio::log.info "tcuperiodicupdate: ${UPDATE_OUT}"
   fi
 
   # Flush expired tokens — capture output for error/event logging
-  FLUSH_OUT=$(python3 manage.py flushexpiredtokens 2>&1 | grep -vE "Starting token flush|No expired tokens found") || true
+  FLUSH_OUT=$(python3 manage.py flushexpiredtokens 2>&1 | grep -vE "Starting token flush|No expired tokens found|Using selector: EpollSelector") || true
   if [ -n "$FLUSH_OUT" ] && [ "$FLUSH_OUT" != "" ]; then
     bashio::log.info "flushexpiredtokens: ${FLUSH_OUT}"
   fi

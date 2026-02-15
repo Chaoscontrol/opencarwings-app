@@ -1,5 +1,6 @@
 #!/command/with-contenv bashio
 # shellcheck shell=bash
+source /etc/cont-init.d/00-log-fix.sh
 
 # Set timezone
 if bashio::config.has_value 'timezone'; then

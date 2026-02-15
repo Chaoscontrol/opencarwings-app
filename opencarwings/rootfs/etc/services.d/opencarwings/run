@@ -1,5 +1,6 @@
 #!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
+source /etc/cont-init.d/00-log-fix.sh
 
 cd /opt/opencarwings || exit 1
 
@@ -36,5 +37,5 @@ bashio::log.info "Configured CSRF Trusted Origins: $CSRF_TRUSTED_ORIGINS"
 # --- 3. Start OpenCarwings Server ---
 bashio::log.info "Starting OpenCarwings server with Daphne on port $DAPHNE_PORT..."
 
-exec daphne -b 0.0.0.0 -p $DAPHNE_PORT \
+exec daphne --access-log /dev/null -b 0.0.0.0 -p $DAPHNE_PORT \
   carwings.asgi:application
