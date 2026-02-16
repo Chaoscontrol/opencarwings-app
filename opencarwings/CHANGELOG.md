@@ -1,3 +1,8 @@
+## v0.0.20-2 - 2026-02-16 [Addon Patch]
+
+- Updated HA Readme
+- chore: remove upstream link and ignore local workspace files
+
 ## v0.0.20-1 - 2026-02-15 [Addon Patch]
 
 - feat: add Monogoto SMS delivery webhook support. feat: revamp full logging docs: Update ALERTS.md with upstream-first alert matrix documentation
