@@ -11,20 +11,15 @@ export ACTIVATION_SMS_MESSAGE="NISSAN_EVIT_TELEMATICS_CENTER"
 export MONOGOTO_SMS_DELIVERY_WEBHOOK_ENABLED=$(bashio::config 'monogoto_sms_delivery_webhook_enabled' 'false')
 export MONOGOTO_SMS_DELIVERY_WEBHOOK_TOKEN="ocw"
 
-# Show copy-ready Monogoto webhook URL(s) when feature is enabled.
+# Show copy-ready Monogoto webhook URL when feature is enabled.
 if [ "$MONOGOTO_SMS_DELIVERY_WEBHOOK_ENABLED" = "true" ]; then
-    DOMAIN_COUNT=$(bashio::config 'trusted_domains | length')
-    if [ "$DOMAIN_COUNT" -gt 0 ]; then
-        bashio::log.info "Monogoto SMS delivery webhook is enabled. Use one of these URLs in Monogoto:"
-        for (( i=0; i<DOMAIN_COUNT; i++ )); do
-            domain=$(bashio::config "trusted_domains[${i}]")
-            if [ -n "$domain" ]; then
-                WEBHOOK_URL="https://${domain}/api/webhook/monogoto/sms-delivery/?token=${MONOGOTO_SMS_DELIVERY_WEBHOOK_TOKEN}"
-                bashio::log.info $'\033[34m'"${WEBHOOK_URL}"$'\033[0m'
-            fi
-        done
+    HTTP_DOMAIN=$(bashio::config 'http_domain' '' | xargs)
+    if [ -n "$HTTP_DOMAIN" ]; then
+        bashio::log.info "Monogoto SMS delivery webhook is enabled. Use this URL in Monogoto:"
+        WEBHOOK_URL="https://${HTTP_DOMAIN}/api/webhook/monogoto/sms-delivery/?token=${MONOGOTO_SMS_DELIVERY_WEBHOOK_TOKEN}"
+        bashio::log.info $'\033[34m'"${WEBHOOK_URL}"$'\033[0m'
     else
-        bashio::log.warning "Monogoto webhook enabled but trusted_domains is empty, cannot print webhook URL."
+        bashio::log.warning "Monogoto webhook enabled but http_domain is empty, cannot print webhook URL."
     fi
 fi
 
@@ -58,7 +53,7 @@ if [ -f "carwings/settings.docker.py" ]; then
     fi
     
     # NOTE: CSRF_TRUSTED_ORIGINS is handled at runtime by:
-    #   1. opencarwings/run — builds the env var from trusted_domains config
+    #   1. opencarwings/run — builds the env var from http_domain + tcu_domain config
     #   2. 05-patch-settings.sh — patches settings.py to read from env var
     
     export DJANGO_SETTINGS_MODULE="carwings.settings"

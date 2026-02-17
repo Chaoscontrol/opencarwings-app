@@ -54,43 +54,37 @@ In the app **Configuration** tab, set:
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
 | `timezone`                              | Your local timezone (e.g., `Europe/Madrid`)                                                           | `UTC`   |
 | `log_level`                             | Detail of logs (`info`, `debug`, `trace`, etc.)                                                       | `info`  |
-| `trusted_domains`                       | **Required.** Your public domain (e.g., `["ocw.duckdns.org"]`)                                        | `[]`    |
+| `http_domain`                           | **Required.** Public domain for Web UI, REST API, and Monogoto webhook over HTTP/HTTPS                | `""`    |
+| `tcu_domain`                            | **Required.** Public domain/hostname used by Nissan TCU traffic on raw TCP port `55230`               | `""`    |
 | `ocm_api_key`                           | [OpenChargeMap](https://openchargemap.org/) API key (optional for updating stations from the navi)    | `""`    |
 | `iternio_api_key`                       | [Iternio/ABRP](https://www.iternio.com/) API key (paid, optional for planning routes in the car navi) | `""`    |
 | `monogoto_sms_delivery_webhook_enabled` | Enable Monogoto SMS delivery confirmation webhook endpoint/logging                                    | `false` |
-
-> [!CAUTION]
-> **`trusted_domains` is mandatory.** It now controls both Django CSRF trust and the Nginx host allowlist.
-> - Add every public hostname that points to this add-on.
-> - Requests using hosts not in `trusted_domains` are dropped at Nginx.
-> - If `trusted_domains` is empty, Nginx fails closed and rejects all requests on `8124` and `8125`.
 
 ### 3. Configure Port Forwarding
 
 On your **router**, forward these ports to your **Home Assistant IP**:
 
-| Port      | Protocol | Purpose                                           |
-| --------- | -------- | ------------------------------------------------- |
-| **55230** | TCP      | TCU Direct Communication (Nissan protocol)        |
+| Port      | Protocol | Purpose                                                        |
+| --------- | -------- | -------------------------------------------------------------- |
+| **55230** | TCP      | TCU Direct Communication (Nissan protocol)                     |
 | **8124**  | TCP      | HTTP origin for car endpoint + browser UI + Home Assistant API |
-| **8125**  | TCP      | Optional direct HTTPS access to browser UI + API |
+| **8125**  | TCP      | Optional direct HTTPS access to browser UI + API               |
 
-### 3.5 Domain and URL setup (simple mode, recommended)
+### 3.5 Domain and URL setup
 
-Use one public domain for browser + HA API through your reverse proxy/tunnel:
+Use explicit domains per traffic type:
 
-- Public domain: `ocw.example.com`
+- HTTP domain (UI/API/Webhook): `ocw.example.com`
+- TCU domain (raw TCP 55230): `tcu.example.com`
 - Proxy/Tunnel origin: `http://<HA_IP>:8124`
 
-If you also use a second domain for car/nav flows, add that too.  
-Every hostname that reaches OCW must be in `trusted_domains`.
+You can set both fields to the same hostname if your setup is single-domain.
 
 Example:
 
 ```yaml
-trusted_domains:
-  - ocw.example.com
-  - ocw-navi.example.com
+http_domain: ocw.mydomain.com
+tcu_domain: tcu.duckdns.org
 ```
 
 ### 3.6 Why HTTPS still works if origin uses HTTP `8124`
@@ -104,6 +98,7 @@ For the recommended setup:
 
 > [!IMPORTANT]
 > URLs with or without explicit ports depend on your external routing:
+>
 > - **Cloudflare/reverse proxy mode** (proxy terminates HTTPS): usually use URLs **without** `:8125`.
 > - **Direct DuckDNS/port-forward mode** (you expose OCW directly): usually use `:8125` for HTTPS URLs.
 
@@ -134,20 +129,31 @@ Starting OpenCarwings TCU Socket Server...
 
 Update your Nissan LEAF's **Navigation** and **TCU** settings:
 
-- **Navi VFlash URL**: `http://car-domain.com/WARCondelivbas/it-m_gw10/`
-- **TCU Server URL**: `yourdomain.com`
+- **Navi VFlash URL**: `http://<http_domain>/WARCondelivbas/it-m_gw10/`
+- **TCU Server URL**: `<tcu_domain>`
 
 > [!NOTE]
 > The Navi VFlash URL must be reachable over HTTP on port `8124` and must include the exact path `/WARCondelivbas/it-m_gw10/`.
 
 > [!TIP]
-> **SSL & Domain Setup (Recommended)**: For the best experience (valid SSL certificates and reliable connection), we strongly recommend using the **DuckDNS App (formerly Add-on)**.
+> **SSL & Domain Setup (Recommended)**
 >
-> - It handles your public domain (DDNS).
-> - It automatically manages Let's Encrypt SSL certificates.
-> - **Why DuckDNS?** Even if you use Tailscale or Cloudflare Tunnels for remote HA access, they **cannot** handle as of yet the raw TCP traffic required by the car (port 55230). DuckDNS combined with port forwarding is the only way for the car to connect.
+> Use the two domains according to traffic type:
 >
-> **Example DuckDNS App (formerly Add-on) Configuration**:
+> - `http_domain` (UI/API/Webhook): HTTPS endpoint for browser/API/webhook traffic.
+> - `tcu_domain` (TCU): raw TCP endpoint on port `55230` for the car.
+>
+> Typical topologies:
+>
+> - **Cloudflare/reverse proxy for HTTP + direct port-forward for TCU**:
+>   - Proxy/tunnel `http_domain` to `http://<HA_IP>:8124` (Cloudflare handles SSL)
+>   - Port-forward `55230` to Home Assistant for `tcu_domain`
+> - **DuckDNS + port-forward for both**:
+>   - Use DuckDNS app for DDNS and Let's Encrypt certificates
+>   - Expose `8125` for direct HTTPS on `http_domain`
+>   - Expose `55230` for `tcu_domain`
+>
+> **Example DuckDNS App (formerly Add-on) configuration**:
 
 > ```yaml
 > domains:
@@ -162,7 +168,7 @@ Update your Nissan LEAF's **Navigation** and **TCU** settings:
 > seconds: 300
 > ```
 >
-> _Note: You do **not** need to add the SSL certificate paths to your `configuration.yaml` http section like DuckDNS suggests if you only use them for this app. They're only for HA access._
+> _Note: SSL certificates apply to HTTP(S) endpoints (`http_domain`). TCU traffic on port `55230` is raw TCP and separate from HTTPS._
 
 ---
 
@@ -185,13 +191,13 @@ Internet → Router Port Forward → Home Assistant
 - **Nginx** enforces strict port roles:
   - `8124`: single-domain compatible HTTP origin for car + UI + HA API
   - `8125`: optional direct HTTPS access for UI/API
-- **Host allowlist** comes from `trusted_domains`; unknown hosts are dropped.
+- **Host allowlist** is built from `http_domain` + `tcu_domain`; unknown hosts are dropped.
 - **Daphne** runs the Django application on internal port 8000.
 - **TCU Server** listens on port 55230 for direct Nissan protocol communication.
 
 ## Security behavior
 
-- Unknown host (`Host` not in `trusted_domains`): dropped.
+- Unknown host (`Host` not matching `http_domain` or `tcu_domain`): dropped.
 - Car endpoint `/WARCondelivbas/it-m_gw10/` on `8124` with non-car User-Agent: blocked (`403`).
 - Common exploit scan paths are dropped.
 
@@ -202,8 +208,8 @@ Internet → Router Port Forward → Home Assistant
 If `monogoto_sms_delivery_webhook_enabled: true`, the app exposes:
 
 - `POST /api/webhook/monogoto/sms-delivery/?token=ocw`
-- Cloudflare/reverse proxy example: `https://your-domain.com/api/webhook/monogoto/sms-delivery/?token=ocw`
-- Direct DuckDNS/port-forward example: `https://your-domain.com:8125/api/webhook/monogoto/sms-delivery/?token=ocw`
+- Cloudflare/reverse proxy example: `https://<http_domain>/api/webhook/monogoto/sms-delivery/?token=ocw`
+- Direct DuckDNS/port-forward example: `https://<http_domain>:8125/api/webhook/monogoto/sms-delivery/?token=ocw`
 
 Behavior:
 
@@ -215,7 +221,7 @@ Behavior:
 
 Startup convenience:
 
-- On startup, the app logs copy-ready webhook URL(s) using `trusted_domains`.
+- On startup, the app logs a copy-ready webhook URL using `http_domain`.
 
 ---
 

@@ -15,24 +15,42 @@ DAPHNE_PORT=8000  # Nginx handles external ports 8124/8125
 # --- 2. Configure CSRF Trusted Origins ---
 # We need to explicitly trust the domains + ports to avoid CSRF errors
 CSRF_ORIGINS=""
+UNIQUE_DOMAINS_CSV=""
+VALID_DOMAIN_COUNT=0
 
-# Use bashio's native list iteration
-DOMAIN_COUNT=$(bashio::config 'trusted_domains | length')
+for key in http_domain tcu_domain; do
+    domain=$(bashio::config "${key}" '' | xargs)
 
-for (( i=0; i < DOMAIN_COUNT; i++ )); do
-    domain=$(bashio::config "trusted_domains[${i}]")
-    bashio::log.info "Adding CSRF trusted domain: ${domain}"
-    # Add raw domain (sometimes needed)
+    if [ -z "$domain" ]; then
+        continue
+    fi
+
+    if [[ ! "$domain" =~ ^[A-Za-z0-9.-]+$ ]]; then
+        bashio::log.warning "Ignoring invalid ${key} value for CSRF origins: '${domain}'"
+        continue
+    fi
+
+    if [[ ",${UNIQUE_DOMAINS_CSV}" == *",${domain},"* ]]; then
+        continue
+    fi
+
+    UNIQUE_DOMAINS_CSV+="${domain},"
+    VALID_DOMAIN_COUNT=$((VALID_DOMAIN_COUNT + 1))
+
+    bashio::log.info "Adding CSRF trusted domain from ${key}: ${domain}"
     CSRF_ORIGINS+="https://${domain},"
     CSRF_ORIGINS+="http://${domain},"
-    # Add with ports
     CSRF_ORIGINS+="https://${domain}:8125,"
     CSRF_ORIGINS+="http://${domain}:8124,"
 done
 
 # Pass this to Django settings
 export CSRF_TRUSTED_ORIGINS="${CSRF_ORIGINS%,}"
-bashio::log.info "Configured CSRF Trusted Origins: $CSRF_TRUSTED_ORIGINS"
+if [ "$VALID_DOMAIN_COUNT" -eq 0 ]; then
+    bashio::log.warning "No valid domains configured in http_domain/tcu_domain for CSRF trusted origins."
+else
+    bashio::log.info "Configured CSRF Trusted Origins: $CSRF_TRUSTED_ORIGINS"
+fi
 
 # --- 3. Start OpenCarwings Server ---
 bashio::log.info "Starting OpenCarwings server with Daphne on port $DAPHNE_PORT..."

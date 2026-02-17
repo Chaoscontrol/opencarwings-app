@@ -1,0 +1,22 @@
+configuration:
+  timezone:
+    name: Time zone
+    description: Local timezone used by the add-on (for example, Europe/Madrid).
+  log_level:
+    name: Log level
+    description: Logging verbosity for add-on services.
+  http_domain:
+    name: HTTP domain (UI/API/Webhook)
+    description: Public domain for Web UI, REST API, and Monogoto webhook over HTTP/HTTPS. Either DuckDNS+Port forwarding or Cloudflare/Tailscale can be used.
+  tcu_domain:
+    name: TCU domain (raw TCP 55230)
+    description: Public domain or hostname used by Nissan TCU traffic on raw TCP port 55230. Tailscale or Cloudflare won't work for this. DuckDNS+Port forwarding suggested.
+  ocm_api_key:
+    name: OpenChargeMap API key
+    description: Optional OpenChargeMap API key for updating charging stations from the car navigator.
+  iternio_api_key:
+    name: Iternio API key
+    description: Optional (paid) Iternio/ABRP API key for route planning features in the car navigator.
+  monogoto_sms_delivery_webhook_enabled:
+    name: Enable Monogoto delivery webhook
+    description: Enable SMS delivery confirmation webhook endpoint and related logging.

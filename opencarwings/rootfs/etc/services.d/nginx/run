@@ -31,13 +31,13 @@ else
 fi
 
 # Build trusted host map from add-on config.
-# Requests with a Host header not present in trusted_domains are dropped.
+# Requests with a Host header not present in http_domain/tcu_domain are dropped.
 TRUSTED_HOSTS_MAP=$'    default 0;\n'
 VALID_TRUSTED_DOMAIN_COUNT=0
-DOMAIN_COUNT=$(bashio::config 'trusted_domains | length')
+UNIQUE_DOMAINS_CSV=""
 
-for (( i=0; i<DOMAIN_COUNT; i++ )); do
-    domain=$(bashio::config "trusted_domains[${i}]")
+for key in http_domain tcu_domain; do
+    domain=$(bashio::config "${key}" '' )
     domain=$(echo "$domain" | xargs)
 
     if [ -z "$domain" ]; then
@@ -45,17 +45,21 @@ for (( i=0; i<DOMAIN_COUNT; i++ )); do
     fi
 
     if [[ "$domain" =~ ^[A-Za-z0-9.-]+$ ]]; then
+        if [[ ",${UNIQUE_DOMAINS_CSV}" == *",${domain},"* ]]; then
+            continue
+        fi
+        UNIQUE_DOMAINS_CSV+="${domain},"
         TRUSTED_HOSTS_MAP+=$'    '"${domain}"$' 1;\n'
         VALID_TRUSTED_DOMAIN_COUNT=$((VALID_TRUSTED_DOMAIN_COUNT + 1))
     else
-        bashio::log.warning "Ignoring invalid trusted domain value: '${domain}'"
+        bashio::log.warning "Ignoring invalid ${key} value for trusted host allowlist: '${domain}'"
     fi
 done
 
 if [ "$VALID_TRUSTED_DOMAIN_COUNT" -eq 0 ]; then
-    bashio::log.warning "No valid trusted_domains configured. Nginx will fail closed and reject all external requests."
+    bashio::log.warning "No valid domains configured in http_domain/tcu_domain. Nginx will fail closed and reject all external requests."
 else
-    bashio::log.info "Loaded ${VALID_TRUSTED_DOMAIN_COUNT} trusted domain(s) for Nginx host allowlist."
+    bashio::log.info "Loaded ${VALID_TRUSTED_DOMAIN_COUNT} trusted domain(s) from http_domain/tcu_domain for Nginx host allowlist."
 fi
 
 # Generate dynamic Nginx configuration
@@ -97,7 +101,7 @@ server {
     access_log /dev/stdout ocw;
     error_log /dev/stderr info;
 
-    # Only hosts listed in trusted_domains are served.
+    # Only hosts listed in http_domain/tcu_domain are served.
     if (\$is_trusted_host = 0) {
         return 444;
     }
@@ -163,7 +167,7 @@ server {
     ssl_certificate $CERT_FILE;
     ssl_certificate_key $KEY_FILE;
 
-    # Only hosts listed in trusted_domains are served.
+    # Only hosts listed in http_domain/tcu_domain are served.
     if (\$is_trusted_host = 0) {
         return 444;
     }

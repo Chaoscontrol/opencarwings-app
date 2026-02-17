@@ -15,19 +15,22 @@ ports:
 ports_description:
   8124/tcp: Web UI and Navigator backend (HTTP)
   8125/tcp: Web UI (HTTPS)
-  55230/tcp: Nissan TCU direct communication (TCU Link) - DO NOT CHANGE THIS PORT - IT IS FIXED BY THE TCU
+  55230/tcp: Nissan TCU direct communication (raw TCP, TCU Link) - DO NOT CHANGE THIS PORT - IT IS FIXED BY THE TCU
 options:
   timezone: UTC
   log_level: info
-  trusted_domains: []
+  # Public domain for Web UI, REST API, and Monogoto webhook over HTTP/HTTPS.
+  http_domain: ""
+  # Public domain/hostname used by Nissan TCU traffic on raw TCP port 55230.
+  tcu_domain: ""
   ocm_api_key: ""
   iternio_api_key: ""
   monogoto_sms_delivery_webhook_enabled: false
 schema:
   timezone: str?
   log_level: list(trace|debug|info|notice|warning|error|fatal)
-  trusted_domains:
-    - str?
+  http_domain: str
+  tcu_domain: str
   ocm_api_key: str?
   iternio_api_key: str?
   monogoto_sms_delivery_webhook_enabled: bool?
