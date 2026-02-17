@@ -64,25 +64,34 @@ else
 fi
 
 # --- Patch 3: Force Colorized Console Logging & Dynamic Debug Level ---
-LOGGING_PATCH_MARKER="# --- OpenCarwings Logging Patch V5 ---"
+LOGGING_PATCH_MARKER="# --- OpenCarwings Logging Patch V7 ---"
 
 if ! grep -q "$LOGGING_PATCH_MARKER" "$SETTINGS_FILE"; then
-    bashio::log.info "Patching settings.py for Colorized Console Logging (V5)..."
+    bashio::log.info "Patching settings.py for Colorized Console Logging (V7)..."
     cat <<'EOF' >> "$SETTINGS_FILE"
 
-# --- OpenCarwings Logging Patch V5 ---
+# --- OpenCarwings Logging Patch V7 ---
 import os
 import sys
 import logging
 
-# Determine log level (fallback to INFO)
-# Sanitize environment variable (fix for '6' or other non-standard levels)
+# Add TRACE level for deep protocol parser diagnostics.
+TRACE_LEVEL_NUM = 5
+if not hasattr(logging, "TRACE"):
+    logging.addLevelName(TRACE_LEVEL_NUM, "TRACE")
+    def trace(self, message, *args, **kws):
+        if self.isEnabledFor(TRACE_LEVEL_NUM):
+            self._log(TRACE_LEVEL_NUM, message, args, **kws)
+    logging.Logger.trace = trace
+    logging.TRACE = TRACE_LEVEL_NUM
+
+# Determine log level (fallback to INFO).
 RAW_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
-VALID_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+VALID_LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 
 if RAW_LEVEL in VALID_LEVELS:
     LOG_LEVEL = RAW_LEVEL
-elif RAW_LEVEL == '6' or RAW_LEVEL == 'TRACE':
+elif RAW_LEVEL == '6':
     LOG_LEVEL = 'DEBUG'
 else:
     LOG_LEVEL = 'INFO'
@@ -90,9 +99,23 @@ else:
 if os.environ.get('DEBUG', 'False') == 'True':
     LOG_LEVEL = 'DEBUG'
 
+LOG_IS_TRACE = LOG_LEVEL == 'TRACE'
+
+class AppNoiseFilter(logging.Filter):
+    def filter(self, record):
+        msg = str(record.getMessage())
+
+        # PIL emits very chatty PNG chunk traces as DEBUG; hide them unless TRACE mode.
+        if record.name.startswith("PIL.PngImagePlugin") and msg.startswith("STREAM b'"):
+            if not LOG_IS_TRACE:
+                return False
+            record.levelno = TRACE_LEVEL_NUM
+            record.levelname = "TRACE"
+        return True
+
 class AppColorFormatter(logging.Formatter):
     # Match Home Assistant style: green for INFO, red for ERROR, etc.
-    COLORS = {'DEBUG': '35', 'INFO': '32', 'WARNING': '33', 'ERROR': '31', 'CRITICAL': '1;31'}
+    COLORS = {'TRACE': '36', 'DEBUG': '35', 'INFO': '32', 'WARNING': '33', 'ERROR': '31', 'CRITICAL': '1;31'}
     def format(self, record):
         color = self.COLORS.get(record.levelname, '0')
         
@@ -156,12 +179,19 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'stream': sys.stdout,
             'formatter': 'color',
+            'filters': ['app_noise'],
         },
         'file': {
             'class': 'logging.FileHandler',
             'filename': '/opt/opencarwings/tcuserver.log',
             'formatter': 'color',
             'mode': 'a',
+            'filters': ['app_noise'],
+        },
+    },
+    'filters': {
+        'app_noise': {
+            '()': 'carwings.settings.AppNoiseFilter',
         },
     },
     'loggers': {
@@ -667,7 +697,333 @@ else
     bashio::log.warning "api/views.py or carwings/urls.py not found, skipping Monogoto webhook patch."
 fi
 
-# --- Patch 8: Clear stale commands on startup ---
+# --- Patch 8: Demote probe parser spam to TRACE + add compact summaries ---
+PROBE_TRACE_PATCH_MARKER="# --- OpenCarwings Probe Trace Patch V1 ---"
+PROBE_DOT_FILE="/opt/opencarwings/tculink/carwings_proto/probe_dot.py"
+PROBE_CRM_FILE="/opt/opencarwings/tculink/carwings_proto/probe_crm.py"
+PROBE_PI_FILE="/opt/opencarwings/tculink/carwings_proto/applications/pi.py"
+
+if [ -f "$PROBE_DOT_FILE" ] && [ -f "$PROBE_CRM_FILE" ] && [ -f "$PROBE_PI_FILE" ]; then
+    bashio::log.info "Patching probe parser logs (TRACE demotion + summaries)..."
+    python3 - <<'EOF'
+from pathlib import Path
+
+marker = "# --- OpenCarwings Probe Trace Patch V1 ---"
+
+def apply_replacements(content, replacements):
+    changed = False
+    for old, new in replacements:
+        if old in content:
+            content = content.replace(old, new)
+            changed = True
+    return content, changed
+
+def patch_file(path, replacements):
+    path_obj = Path(path)
+    content = path_obj.read_text(encoding="utf-8")
+    if marker in content:
+        return False
+    content, changed = apply_replacements(content, replacements)
+    if changed:
+        content = marker + "\n" + content
+        path_obj.write_text(content, encoding="utf-8")
+        return True
+    return False
+
+dot_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/probe_dot.py",
+    [
+        ('logger.debug("TYPE: %d/%s, %s", item_type, hex(item_type), str(prb_type[0]))', 'logger.trace("TYPE: %d/%s, %s", item_type, hex(item_type), str(prb_type[0]))'),
+        ('logger.debug("DATALEN: %d", prb_type[1])', 'logger.trace("DATALEN: %d", prb_type[1])'),
+        ('logger.debug("DATA: %s", data.hex())', 'logger.trace("DATA: %s", data.hex())'),
+        ('logger.debug("-------------------")', 'logger.trace("-------------------")'),
+    ],
+)
+
+crm_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/probe_crm.py",
+    [
+        ('logger.debug("Label: %d,%s", item_type, hex(item_type))', 'logger.trace("Label: %d,%s", item_type, hex(item_type))'),
+        ('logger.debug("Datafield type: %d", meta["type"])', 'logger.trace("Datafield type: %d", meta["type"])'),
+        ('logger.debug("Block count: %d", size_field)', 'logger.trace("Block count: %d", size_field)'),
+        ('logger.debug("MSN Byte count: %s", size_field)', 'logger.trace("MSN Byte count: %s", size_field)'),
+        ('logger.debug("Size: %s", hex(size))', 'logger.trace("Size: %s", hex(size))'),
+        ('logger.debug("DATALEN: %d",size-1)', 'logger.trace("DATALEN: %d",size-1)'),
+        ('logger.debug("-------------------")', 'logger.trace("-------------------")'),
+        ('logger.debug("Starting to parse crmblock %s", crmblock["struct"])', 'logger.trace("Starting to parse crmblock %s", crmblock["struct"])'),
+        ('logger.debug("Block change, closing block: %s", currentblock)', 'logger.trace("Block change, closing block: %s", currentblock)'),
+        ('logger.info("Identified head item! saving previous object and opening new")', 'logger.trace("Identified head item! saving previous object and opening new")'),
+        ('logger.info("Block %d", crmblock["type"])', 'logger.trace("Block %d", crmblock["type"])'),
+        ('logger.debug(item_data.hex())', 'logger.trace(item_data.hex())'),
+    ],
+)
+
+pi_path = Path("/opt/opencarwings/tculink/carwings_proto/applications/pi.py")
+pi_content = pi_path.read_text(encoding="utf-8")
+pi_changed = False
+if marker not in pi_content:
+    old_crm = "                                            update_crm_to_db(car_ref, crm_data)\n"
+    new_crm = (
+        "                                            update_crm_to_db(car_ref, crm_data)\n"
+        "                                            summary_blocks = sum(1 for value in crm_data.values() if (isinstance(value, dict) and len(value) > 0) or (isinstance(value, list) and len(value) > 0))\n"
+        "                                            logger.debug(\"[probe] Parsed CRM blocks: %d, file=%s, navi_id=%s, vin=%s\", summary_blocks, filename, xml_data.get('authentication', {}).get('navi_id', '?'), xml_data.get('authentication', {}).get('vin', '?'))\n"
+    )
+    if old_crm in pi_content:
+        pi_content = pi_content.replace(old_crm, new_crm)
+        pi_changed = True
+
+    old_dot = "                                            dot_data = parse_dotfile(decrypted_data)\n"
+    new_dot = (
+        "                                            dot_data = parse_dotfile(decrypted_data)\n"
+        "                                            logger.debug(\"[probe] Parsed DOT entries: %d, file=%s, navi_id=%s, vin=%s\", len(dot_data), filename, xml_data.get('authentication', {}).get('navi_id', '?'), xml_data.get('authentication', {}).get('vin', '?'))\n"
+    )
+    if old_dot in pi_content:
+        pi_content = pi_content.replace(old_dot, new_dot)
+        pi_changed = True
+
+    if pi_changed:
+        pi_content = marker + "\n" + pi_content
+        pi_path.write_text(pi_content, encoding="utf-8")
+
+if dot_changed:
+    print("[INFO] probe_dot.py patched for TRACE parser logs")
+if crm_changed:
+    print("[INFO] probe_crm.py patched for TRACE parser logs")
+if pi_changed:
+    print("[INFO] applications/pi.py patched with compact probe summaries")
+if not any([dot_changed, crm_changed, pi_changed]):
+    print("[DEBUG] Probe trace/summaries already patched or patterns not found.")
+EOF
+else
+    bashio::log.warning "Probe parser files not found, skipping TRACE demotion patch."
+fi
+
+# --- Patch 9: Tune CP/XML envelope logs (INFO -> DEBUG/TRACE) ---
+CP_LOG_TUNE_MARKER="# --- OpenCarwings CP Log Tuning Patch V1 ---"
+CP_FILE="/opt/opencarwings/tculink/carwings_proto/applications/cp.py"
+TCULINK_VIEWS_FILE="/opt/opencarwings/tculink/views.py"
+DATABUFFER_FILE="/opt/opencarwings/tculink/carwings_proto/databuffer.py"
+
+if [ -f "$CP_FILE" ] && [ -f "$TCULINK_VIEWS_FILE" ] && [ -f "$DATABUFFER_FILE" ]; then
+    bashio::log.info "Tuning CP/XML/envelope log verbosity..."
+    python3 - <<'EOF'
+from pathlib import Path
+
+marker = "# --- OpenCarwings CP Log Tuning Patch V1 ---"
+
+def apply_replacements(content, replacements):
+    changed = False
+    for old, new in replacements:
+        if old in content:
+            content = content.replace(old, new)
+            changed = True
+    return content, changed
+
+def patch_file(path, replacements):
+    path_obj = Path(path)
+    content = path_obj.read_text(encoding="utf-8")
+    if marker in content:
+        return False
+    content, changed = apply_replacements(content, replacements)
+    if changed:
+        content = marker + "\n" + content
+        path_obj.write_text(content, encoding="utf-8")
+        return True
+    return False
+
+cp_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/applications/cp.py",
+    [
+        ('logger.debug("Mesh ID: %d, chargers: %d", mesh_id, len(chargers))', 'logger.trace("Mesh ID: %d, chargers: %d", mesh_id, len(chargers))'),
+        ('logger.debug((len(chargers_resp)))', 'logger.trace((len(chargers_resp)))'),
+        ('logger.info(cpinfo_obj)', 'logger.trace(cpinfo_obj)'),
+        ('logger.info("get CPINFO! %d", len(charger_ids))', 'logger.debug("get CPINFO! %d", len(charger_ids))'),
+    ],
+)
+
+views_changed = patch_file(
+    "/opt/opencarwings/tculink/views.py",
+    [
+        ('logger.info("XML:")', 'logger.debug("XML:")'),
+        ('logger.info(parsed_xml)', 'logger.debug(parsed_xml)'),
+    ],
+)
+
+dbuf_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/databuffer.py",
+    [
+        ('logger.info("- Files count: %d", file_count)', 'logger.debug("- Files count: %d", file_count)'),
+        ('logger.info("- Body size: %d", body_size)', 'logger.debug("- Body size: %d", body_size)'),
+        ('logger.info("------- Length content: %d", len(file_content))', 'logger.debug("------- Length content: %d", len(file_content))'),
+    ],
+)
+
+if cp_changed:
+    print("[INFO] cp.py log levels tuned")
+if views_changed:
+    print("[INFO] tculink/views.py XML logs moved to debug")
+if dbuf_changed:
+    print("[INFO] databuffer.py envelope logs moved to debug")
+if not any([cp_changed, views_changed, dbuf_changed]):
+    print("[DEBUG] CP/XML/envelope tuning already patched or patterns not found.")
+EOF
+else
+    bashio::log.warning "CP/XML/databuffer files not found, skipping log tuning patch."
+fi
+
+# --- Patch 10: Car request summary + DJ/PI/CP log demotion ---
+CAR_LOG_TUNE_MARKER="# --- OpenCarwings Car Request Log Tuning Patch V2 ---"
+DJ_FILE="/opt/opencarwings/tculink/carwings_proto/applications/dj.py"
+PI_FILE="/opt/opencarwings/tculink/carwings_proto/applications/pi.py"
+PROBE_CRM_FILE="/opt/opencarwings/tculink/carwings_proto/probe_crm.py"
+AUTODJ_OCW_FILE="/opt/opencarwings/tculink/carwings_proto/autodj/opencarwings.py"
+
+if [ -f "$TCULINK_VIEWS_FILE" ] && [ -f "$DATABUFFER_FILE" ] && [ -f "$CP_FILE" ] && [ -f "$DJ_FILE" ] && [ -f "$PI_FILE" ] && [ -f "$PROBE_CRM_FILE" ] && [ -f "$AUTODJ_OCW_FILE" ]; then
+    bashio::log.info "Applying car request log tuning (INFO summary + DEBUG/TRACE demotions)..."
+    python3 - <<'EOF'
+from pathlib import Path
+
+marker = "# --- OpenCarwings Car Request Log Tuning Patch V2 ---"
+
+def apply_replacements(content, replacements):
+    changed = False
+    for old, new in replacements:
+        if old in content:
+            content = content.replace(old, new)
+            changed = True
+    return content, changed
+
+def patch_file(path, replacements):
+    path_obj = Path(path)
+    content = path_obj.read_text(encoding="utf-8")
+    if marker in content:
+        return False
+    content, changed = apply_replacements(content, replacements)
+    if changed:
+        content = marker + "\n" + content
+        path_obj.write_text(content, encoding="utf-8")
+        return True
+    return False
+
+views_changed = patch_file(
+    "/opt/opencarwings/tculink/views.py",
+    [
+        ('logger.info("Binary response length: %d", len(resp_buffer))', 'logger.debug("Binary response length: %d", len(resp_buffer))'),
+        (
+            '    return HttpResponse(io.BytesIO(resp_buffer), content_type="application/x-carwings-nz")',
+            '    app_name = parsed_xml.get("service_info", {}).get("application", {}).get("name", "UNK")\n'
+            '    req_hint = "-"\n'
+            '    if len(files) > 1 and isinstance(files[1], dict):\n'
+            '        req_hint = files[1].get("name", "-")\n'
+            '        payload = files[1].get("content", b"")\n'
+            '        if isinstance(payload, (bytes, bytearray)) and len(payload) >= 6 and app_name in ["CP", "PI"]:\n'
+            '            req_hint = f"{req_hint}/0x{int.from_bytes(payload[4:6], byteorder=\'big\'):03x}"\n'
+            '    logger.info("[car] app=%s req=%s in=%d out=%d status=ok", app_name, req_hint, len(compressed_data), len(resp_buffer))\n\n'
+            '    return HttpResponse(io.BytesIO(resp_buffer), content_type="application/x-carwings-nz")'
+        ),
+    ],
+)
+
+dbuf_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/databuffer.py",
+    [
+        ('logger.info("- Files count: %d", file_count)', 'logger.debug("- Files count: %d", file_count)'),
+        ('logger.info("- Body size: %d", body_size)', 'logger.debug("- Body size: %d", body_size)'),
+        ('logger.info("--- File %d, %s", num, file)', 'logger.debug("--- File %d, %s", num, file)'),
+        ('logger.info("------- Length content: %d", len(file_content))', 'logger.debug("------- Length content: %d", len(file_content))'),
+    ],
+)
+
+cp_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/applications/cp.py",
+    [
+        ('logger.info("Searching for nearest meshid: %f %f", lat, lon)', 'logger.debug("Searching for nearest meshid: %f %f", lat, lon)'),
+        ('logger.info("chargingstations: %d", len(chargers))', 'logger.debug("chargingstations: %d", len(chargers))'),
+    ],
+)
+
+dj_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/applications/dj.py",
+    [
+        ('logger.info("CWS lang: ")', 'logger.debug("CWS lang: ")'),
+        ('logger.info(get_language())', 'logger.debug(get_language())'),
+        ('logger.info("Save to Favorite list func!")', 'logger.debug("Save to Favorite list func!")'),
+        ('logger.info("POS: %d, CHAN ID: %d", pos_num, chan_id)', 'logger.debug("POS: %d, CHAN ID: %d", pos_num, chan_id)'),
+        ('logger.info("Handler ID: %s", hex(handler_id))', 'logger.debug("Handler ID: %s", hex(handler_id))'),
+        ('logger.info("  ->Channel ID: %s", hex(channel_id))', 'logger.debug("  ->Channel ID: %s", hex(channel_id))'),
+        ('logger.info("  ->Flag: %s", hex(flag))', 'logger.debug("  ->Flag: %s", hex(flag))'),
+    ],
+)
+
+pi_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/applications/pi.py",
+    [
+        ('logger.info("0x583 Init!")', 'logger.debug("0x583 Init!")'),
+        ('logger.info("0x583 Version1: %s", hex(file_content[6]))', 'logger.debug("0x583 Version1: %s", hex(file_content[6]))'),
+        ('logger.info("0x583 Version2: %s", hex(file_content[7]))', 'logger.debug("0x583 Version2: %s", hex(file_content[7]))'),
+        ('logger.info("0x584 Config change result")', 'logger.debug("0x584 Config change result")'),
+        ('logger.info("0x584 Result code: %d", cfg_change_result)', 'logger.debug("0x584 Result code: %d", cfg_change_result)'),
+        ('logger.info("0x581 Incoming Data")', 'logger.debug("0x581 Incoming Data")'),
+        ('logger.info("0x581 Filename LEN: %d", filename_length)', 'logger.debug("0x581 Filename LEN: %d", filename_length)'),
+        ('logger.info("0x581 Filename: %s", filename)', 'logger.debug("0x581 Filename: %s", filename)'),
+        ('logger.info("Retrieving file %s", filename)', 'logger.debug("Retrieving file %s", filename)'),
+        ('logger.info("Probe File too small, %s", filename)', 'logger.debug("Probe File too small, %s", filename)'),
+        ('logger.info("Probe file metadata:")', 'logger.debug("Probe file metadata:")'),
+        ('logger.info("  DataLength: %d", data_length)', 'logger.debug("  DataLength: %d", data_length)'),
+        ('logger.info("  FileNumber: %d", file_number)', 'logger.debug("  FileNumber: %d", file_number)'),
+        ('logger.info("  XORKey: %s", hex(xor_key))', 'logger.debug("  XORKey: %s", hex(xor_key))'),
+        ('logger.info("  Checksum: %s", hex(checksum_byte))', 'logger.debug("  Checksum: %s", hex(checksum_byte))'),
+        ('logger.info("  CoordinateSystem: %s", hex(coordinate_system))', 'logger.debug("  CoordinateSystem: %s", hex(coordinate_system))'),
+        ('logger.info("Probe file checksum error!")', 'logger.debug("Probe file checksum error!")'),
+        ('logger.info("CRM File!")', 'logger.debug("CRM File!")'),
+        ('logger.info("Starting CRM file parse")', 'logger.debug("Starting CRM file parse")'),
+        ('logger.info("DOT file!")', 'logger.debug("DOT file!")'),
+        ('logger.info("Starting DOT file parse")', 'logger.debug("Starting DOT file parse")'),
+    ],
+)
+
+crm_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/probe_crm.py",
+    [
+        ('parsingblocks = []', 'parsingblocks = []\n    mismatch_block_size_count = 0'),
+        ('logger.info("-- Start parsing crmblocks --")', 'logger.debug("-- Start parsing crmblocks --")'),
+        ('logger.warning("WARN! mismatch block size")', 'mismatch_block_size_count += 1\n                logger.trace("WARN! mismatch block size")'),
+        ('    return parse_result', '    if mismatch_block_size_count > 0:\n        logger.warning("CRM parse block-size mismatches: %d", mismatch_block_size_count)\n    return parse_result'),
+    ],
+)
+
+autodj_changed = patch_file(
+    "/opt/opencarwings/tculink/carwings_proto/autodj/opencarwings.py",
+    [
+        ('print(header_font.size)', 'logger.trace("header_font.size=%s", header_font.size)'),
+        ('print(halftrees, fulltrees)', 'logger.trace("halftrees=%s fulltrees=%s", halftrees, fulltrees)'),
+        ('print(round(halftrees * 5))', 'logger.trace("halftree_steps=%s", round(halftrees * 5))'),
+        ('logger.info(tree_records)', 'logger.debug(tree_records)'),
+    ],
+)
+
+if views_changed:
+    print("[INFO] tculink/views.py updated with concise [car] summary")
+if dbuf_changed:
+    print("[INFO] databuffer.py file envelope logs demoted to debug")
+if cp_changed:
+    print("[INFO] cp.py noisy info lines demoted")
+if dj_changed:
+    print("[INFO] dj.py verbose info lines demoted")
+if pi_changed:
+    print("[INFO] pi.py verbose info lines demoted")
+if crm_changed:
+    print("[INFO] probe_crm.py mismatch warnings aggregated")
+if autodj_changed:
+    print("[INFO] autodj/opencarwings.py print/debug spam demoted")
+if not any([views_changed, dbuf_changed, cp_changed, dj_changed, pi_changed, crm_changed, autodj_changed]):
+    print("[DEBUG] Car request log tuning already patched or patterns not found.")
+EOF
+else
+    bashio::log.warning "Car request log tuning files not found, skipping V2 log patch."
+fi
+
+# --- Patch 11: Clear stale commands on startup ---
 # If the addon restarted while a command was in "delivered, awaiting response"
 # state (command_result=3), it will be stuck forever. Reset them to "failed" (1).
 bashio::log.info "Checking for stale commands stuck in delivered state..."

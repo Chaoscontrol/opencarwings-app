@@ -19,7 +19,7 @@ if [ "$MONOGOTO_SMS_DELIVERY_WEBHOOK_ENABLED" = "true" ]; then
         for (( i=0; i<DOMAIN_COUNT; i++ )); do
             domain=$(bashio::config "trusted_domains[${i}]")
             if [ -n "$domain" ]; then
-                WEBHOOK_URL="https://${domain}:8125/api/webhook/monogoto/sms-delivery/?token=${MONOGOTO_SMS_DELIVERY_WEBHOOK_TOKEN}"
+                WEBHOOK_URL="https://${domain}/api/webhook/monogoto/sms-delivery/?token=${MONOGOTO_SMS_DELIVERY_WEBHOOK_TOKEN}"
                 bashio::log.info $'\033[34m'"${WEBHOOK_URL}"$'\033[0m'
             fi
         done

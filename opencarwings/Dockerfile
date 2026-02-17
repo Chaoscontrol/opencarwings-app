@@ -21,6 +21,7 @@ RUN apk add --no-cache --upgrade \
     openssl \
     openssl-dev \
     nginx \
+    pngquant \
     dos2unix \
     && python3 -m pip install --upgrade pip
 

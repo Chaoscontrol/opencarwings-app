@@ -214,7 +214,8 @@ Car matching:
 
 Monogoto setup URL template:
 
-- `https://ocw-ha.duckdns.org:8125/api/webhook/monogoto/sms-delivery/?token=ocw`
+- Cloudflare/reverse proxy mode: `https://ocw-ha.duckdns.org/api/webhook/monogoto/sms-delivery/?token=ocw`
+- Direct DuckDNS/port-forward mode: `https://ocw-ha.duckdns.org:8125/api/webhook/monogoto/sms-delivery/?token=ocw`
 
 ---
 
