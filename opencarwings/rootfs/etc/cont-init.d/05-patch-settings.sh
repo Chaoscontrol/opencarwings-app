@@ -383,12 +383,14 @@ for i, line in enumerate(lines):
         new_lines.append(f"{indent}plugged_state = _body.get('pluggedin') if isinstance(_body, dict) else None\n")
         new_lines.append(f"{indent}not_plugin_alert = _body.get('not_plugin_alert') if isinstance(_body, dict) else None\n")
         new_lines.append(f"{indent}charge_request_result = _body.get('charge_request_result') if isinstance(_body, dict) else None\n")
+        new_lines.append(f"{indent}pri_ac_req_result = _body.get('pri_ac_req_result') if isinstance(_body, dict) else None\n")
         new_lines.append(f"{indent}pri_ac_stop_result = _body.get('pri_ac_stop_result') if isinstance(_body, dict) else None\n")
         
         new_lines.append(f"{indent}if _b_type == 'ac_result':\n")
         new_lines.append(f"{indent}    if r_state == 64: detail_msg = 'A/C Started successfully'\n")
         new_lines.append(f"{indent}    elif r_state == 32: detail_msg = 'A/C Stopped successfully'\n")
         new_lines.append(f"{indent}    elif r_state == 192: detail_msg = 'A/C Finished / Auto-off'\n")
+        new_lines.append(f"{indent}    elif r_state == 128 or pri_ac_req_result == 2: detail_msg = 'A/C start rejected (likely low battery SOC)'\n")
         new_lines.append(f"{indent}    elif r_state == 16 and (pri_ac_stop_result == 1 or getattr(car, 'command_type', None) == 4): detail_msg = 'A/C already off (no action needed)'\n")
         new_lines.append(f"{indent}    else: detail_msg = f'A/C Error/Unknown (State {{r_state}})'\n")
         

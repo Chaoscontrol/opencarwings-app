@@ -85,6 +85,16 @@ This addon extends upstream behavior in runtime patching without changing upstre
   - plus protocol/context signal (`pri_ac_stop_result == 1` or command type `4`).
 - This is log-message interpretation only; upstream alert persistence behavior is preserved.
 
+4. `ac_result` state `128` interpretation (addon only):
+
+- Upstream does not map `resultstate=128` explicitly and falls back to A/C error alert type.
+- Addon summary log interprets observed packets as:
+  - `A/C start rejected (likely low battery SOC)`
+- Inference basis:
+  - `resultstate == 128`
+  - or parsed subfield `pri_ac_req_result == 2`.
+- This is log-message interpretation only; upstream alert persistence behavior is preserved.
+
 ---
 
 ## `charge_result` Policy (Current Addon)
