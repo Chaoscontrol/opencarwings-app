@@ -1,3 +1,9 @@
+## v0.0.20-3 - 2026-02-21 [Addon Patch]
+
+- Added alert for ac error 128
+- Split trusted_sources in 2 options for clarity and simplified setup and webhook use
+- Configure port 8124 as unified HTTP origin for car endpoint + browser UI + HA API, making port 8125 optional. Add car endpoint User-Agent check to block non-car requests.
+
 ## v0.0.20-2 - 2026-02-16 [Addon Patch]
 
 - Updated HA Readme
