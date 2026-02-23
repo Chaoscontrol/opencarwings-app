@@ -1,3 +1,10 @@
+## v0.0.21 - 2026-02-23 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Add new navigation guide for AZE0 & ZE1 vehicles + warnings to not mismatch guides. (fe0c8c1)
+- Refactor result handling, switch from alertstate and resultstate to using subfields (516487c)
+
 ## v0.0.20-3 - 2026-02-21 [Addon Patch]
 
 - Added alert for ac error 128
