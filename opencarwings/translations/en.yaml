@@ -5,12 +5,24 @@ configuration:
   log_level:
     name: Log level
     description: Logging verbosity for add-on services.
+  connection_mode:
+    name: Connection mode
+    description: Choose local port forwarding or VPS relay mode via FRP for TCU raw TCP 55230 traffic.
   http_domain:
     name: HTTP domain (UI/API/Webhook)
     description: Public domain for Web UI, REST API, and Monogoto webhook over HTTP/HTTPS. Either DuckDNS+Port forwarding or Cloudflare/Tailscale can be used.
   tcu_domain:
     name: TCU domain (raw TCP 55230)
-    description: Public domain or hostname used by Nissan TCU traffic on raw TCP port 55230. Tailscale or Cloudflare won't work for this. DuckDNS+Port forwarding suggested.
+    description: Public domain or hostname used by Nissan TCU traffic on raw TCP port 55230. In vps_frp mode this should resolve to your VPS.
+  frp_server_addr:
+    name: FRP server address
+    description: VPS hostname or IP where frps is running. Required when connection_mode is vps_frp.
+  frp_server_port:
+    name: FRP server port
+    description: Port where frps listens for frpc connections (default 7000). Required when connection_mode is vps_frp.
+  frp_auth_token:
+    name: FRP auth token
+    description: Authentication token that must match the token configured in frps.toml. Required when connection_mode is vps_frp.
   ocm_api_key:
     name: OpenChargeMap API key
     description: Optional OpenChargeMap API key for updating charging stations from the car navigator.

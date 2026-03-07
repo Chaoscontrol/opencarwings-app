@@ -1,0 +1,76 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# shellcheck source=/etc/cont-init.d/00-log-fix.sh
+
+source /etc/cont-init.d/00-log-fix.sh
+
+MODE=$(bashio::config 'connection_mode' 'local')
+
+if [ "$MODE" = "local" ]; then
+    bashio::log.info "FRP disabled (connection_mode=local)."
+    exec sleep infinity
+fi
+
+if [ "$MODE" != "vps_frp" ]; then
+    bashio::log.warning "Unknown connection_mode '$MODE'. FRP service will remain idle."
+    exec sleep infinity
+fi
+
+trim() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
+FRP_SERVER_ADDR=$(trim "$(bashio::config 'frp_server_addr' '')")
+FRP_SERVER_PORT=$(trim "$(bashio::config 'frp_server_port' '7000')")
+FRP_AUTH_TOKEN=$(trim "$(bashio::config 'frp_auth_token' '')")
+
+if [ -z "$FRP_SERVER_ADDR" ]; then
+    bashio::log.error "connection_mode=vps_frp requires frp_server_addr."
+    exit 1
+fi
+
+if [ -z "$FRP_AUTH_TOKEN" ]; then
+    bashio::log.error "connection_mode=vps_frp requires frp_auth_token."
+    exit 1
+fi
+
+if ! [[ "$FRP_SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$FRP_SERVER_PORT" -lt 1 ] || [ "$FRP_SERVER_PORT" -gt 65535 ]; then
+    bashio::log.error "frp_server_port must be a valid TCP port (1-65535)."
+    exit 1
+fi
+
+if [[ "$FRP_SERVER_ADDR" == *$'\n'* ]] || [[ "$FRP_SERVER_ADDR" == *'"'* ]]; then
+    bashio::log.error "frp_server_addr contains unsupported characters."
+    exit 1
+fi
+
+if [[ "$FRP_AUTH_TOKEN" == *$'\n'* ]] || [[ "$FRP_AUTH_TOKEN" == *'"'* ]]; then
+    bashio::log.error "frp_auth_token contains unsupported characters."
+    exit 1
+fi
+
+mkdir -p /tmp/frp /data/logs
+FRPC_CONFIG=/tmp/frp/frpc.toml
+
+cat > "$FRPC_CONFIG" <<EOC
+serverAddr = "$FRP_SERVER_ADDR"
+serverPort = $FRP_SERVER_PORT
+
+auth.method = "token"
+auth.token = "$FRP_AUTH_TOKEN"
+
+log.to = "/data/logs/frpc.log"
+
+[[proxies]]
+name = "ocw_tcu_55230"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 55230
+remotePort = 55230
+EOC
+
+bashio::log.info "Starting FRP client in VPS mode (TCU TCP 55230 relay to ${FRP_SERVER_ADDR}:55230 via frps ${FRP_SERVER_PORT})."
+exec /usr/local/bin/frpc -c "$FRPC_CONFIG"

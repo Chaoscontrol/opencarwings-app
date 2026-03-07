@@ -41,6 +41,14 @@ RUN pip3 install -r requirements.txt psycopg2-binary \
     whitenoise djangorestframework djangorestframework-simplejwt \
     django-mathfilters drf-yasg
 
+# Install FRP client binary (frpc) for optional VPS relay mode.
+ARG FRP_VERSION=0.64.0
+RUN curl -fsSL "https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz" -o /tmp/frp.tar.gz \
+    && tar -xzf /tmp/frp.tar.gz -C /tmp \
+    && mv "/tmp/frp_${FRP_VERSION}_linux_amd64/frpc" /usr/local/bin/frpc \
+    && chmod +x /usr/local/bin/frpc \
+    && rm -rf /tmp/frp.tar.gz "/tmp/frp_${FRP_VERSION}_linux_amd64"
+
 
 # Create directories for data persistence
 RUN mkdir -p /data/postgres /data/redis /data/static /data/media /data/logs

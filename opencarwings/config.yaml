@@ -19,18 +19,29 @@ ports_description:
 options:
   timezone: UTC
   log_level: info
+  connection_mode: local
   # Public domain for Web UI, REST API, and Monogoto webhook over HTTP/HTTPS.
   http_domain: ""
   # Public domain/hostname used by Nissan TCU traffic on raw TCP port 55230.
   tcu_domain: ""
+  # FRP server hostname or public IP for VPS relay mode (connection_mode=vps_frp).
+  frp_server_addr: ""
+  # FRP server port where frps listens (connection_mode=vps_frp).
+  frp_server_port: 7000
+  # FRP token used to authenticate frpc against your frps server.
+  frp_auth_token: ""
   ocm_api_key: ""
   iternio_api_key: ""
   monogoto_sms_delivery_webhook_enabled: false
 schema:
   timezone: str?
   log_level: list(trace|debug|info|notice|warning|error|fatal)
+  connection_mode: list(local|vps_frp)
   http_domain: str
   tcu_domain: str
+  frp_server_addr: str?
+  frp_server_port: int(1,65535)?
+  frp_auth_token: str?
   ocm_api_key: str?
   iternio_api_key: str?
   monogoto_sms_delivery_webhook_enabled: bool?

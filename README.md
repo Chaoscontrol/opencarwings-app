@@ -2,245 +2,191 @@
 
 Home Assistant app for [OpenCarwings](https://github.com/developerfromjokela/opencarwings) — a Nissan CARWINGS-compatible server for bringing back Nissan TCUs and online services.
 
-**⚠️ SUPER ALPHA WARNING**: This app is experimental software built with AI and lots of reviews. I created this for my own use and am sharing it "as-is". I don't promise long-term maintenance or prompt bug fixing, but I'll do my best to keep it working as long as I use it myself!
+**⚠️ SUPER ALPHA WARNING**: This app is experimental software built with AI and lots of reviews. I created this for my own use and am sharing it "as-is".
 
 ## What it does
 
-This app packages the upstream OpenCarwings server to run on Home Assistant OS/Supervisor. It enables:
+- Remote A/C and climate control for compatible Nissan LEAF models.
+- Charging management and battery status monitoring.
+- Trip data and efficiency statistics.
+- Direct TCU communication using Nissan raw TCP protocol.
+- Built-in PostgreSQL and Redis (no external setup required).
 
-- **Remote A/C & Climate control** for compatible Nissan LEAF models.
-- **Charging Management** and battery status monitoring.
-- **Trip Data** and efficiency statistics.
-- **Direct TCU Communication** via raw TCP protocol.
-- **Built-in Infrastructure**: Includes PostgreSQL and Redis (no external setup required).
+## Connection Modes
 
----
+OpenCarwings now supports two connection modes for TCU connectivity.
 
-## How It Works
+| Mode | Best for | How TCU reaches OCW | Privacy |
+| --- | --- | --- | --- |
+| `local` (default) | Users with public IP + router control | Direct port-forwarded TCP `55230` to Home Assistant | Highest |
+| `vps_frp` | Users behind CGNAT | TCP `55230` terminates at your VPS and is relayed by FRP to Home Assistant | Depends on VPS trust |
 
-Your car's TCU (Telematics Control Unit) needs to reach this server from the internet. This app runs locally on your Home Assistant and you expose it through your router via **port forwarding**.
+Important scope note:
 
-> [!IMPORTANT]
-> **Privacy**: Your data goes directly from your car to your home. No third-party servers involved.
-
-> [!NOTE]
-> **CGNAT Warning**: If your ISP uses CGNAT (you don't have a public IP), this app will not work. You can use the OCW public server instead. There is no tunnel service that works for the ports required by the car.
-
----
+- FRP mode only tunnels the TCU raw TCP channel (`55230`).
+- UI/API/webhook traffic (`8124`/`8125`) is still handled by your existing HTTP setup (direct forwarding, reverse proxy, Cloudflare, etc.).
 
 ## Requirements
 
-Before installing, ensure you have:
+### Common
 
-1. **A public IP address** (static or dynamic) from your ISP.
-2. **The DuckDNS app (formerly Add-on)** (recommended) for both Dynamic DNS (DDNS) and valid SSL certificates.
-3. **Router access** to configure port forwarding.
+1. Home Assistant OS/Supervisor with this app installed.
+2. Public domain(s):
+- `http_domain` for UI/API/webhook.
+- `tcu_domain` for TCU endpoint.
+3. Car-side configuration access (Navi/TCU URLs).
 
----
+### Additional for `local`
 
-## Installation & Setup
+1. Router port forwarding for TCP `55230` to Home Assistant.
+2. If needed, forwarding/proxying for `8124`/`8125`.
+3. DDNS (DuckDNS or equivalent) when ISP IP changes.
 
-### 1. Install the app
+### Additional for `vps_frp`
 
-1. Go to **Settings → Apps → Apps Store → menu (⋮) → Repositories**.
-2. Add: `https://github.com/Chaoscontrol/opencarwings-app`
-3. Find **"OpenCarwings"** and click **Install**.
+1. A VPS with public IP.
+2. FRPS running on VPS.
+3. VPS firewall opened for:
+- TCP `7000` (FRP control)
+- TCP `55230` (public TCU endpoint)
+4. `tcu_domain` must resolve to your VPS public IP.
 
-### 2. Configure the app
+## Install
 
-In the app **Configuration** tab, set:
+1. Home Assistant: **Settings → Apps → Apps Store → Repositories**.
+2. Add `https://github.com/Chaoscontrol/opencarwings-app`.
+3. Install **OpenCarwings**.
 
-| Option                                  | Description                                                                                           | Default |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
-| `timezone`                              | Your local timezone (e.g., `Europe/Madrid`)                                                           | `UTC`   |
-| `log_level`                             | Detail of logs (`info`, `debug`, `trace`, etc.)                                                       | `info`  |
-| `http_domain`                           | **Required.** Public domain for Web UI, REST API, and Monogoto webhook over HTTP/HTTPS                | `""`    |
-| `tcu_domain`                            | **Required.** Public domain/hostname used by Nissan TCU traffic on raw TCP port `55230`               | `""`    |
-| `ocm_api_key`                           | [OpenChargeMap](https://openchargemap.org/) API key (optional for updating stations from the navi)    | `""`    |
-| `iternio_api_key`                       | [Iternio/ABRP](https://www.iternio.com/) API key (paid, optional for planning routes in the car navi) | `""`    |
-| `monogoto_sms_delivery_webhook_enabled` | Enable Monogoto SMS delivery confirmation webhook endpoint/logging                                    | `false` |
+## App Configuration
 
-### 3. Configure Port Forwarding
+| Option | Description | Default |
+| --- | --- | --- |
+| `timezone` | Local timezone | `UTC` |
+| `log_level` | Log verbosity | `info` |
+| `connection_mode` | `local` or `vps_frp` | `local` |
+| `http_domain` | Public domain for UI/API/webhook | `""` |
+| `tcu_domain` | Public domain for TCU raw TCP `55230` | `""` |
+| `frp_server_addr` | VPS IP/hostname running FRPS (required in `vps_frp`) | `""` |
+| `frp_server_port` | FRPS control port (required in `vps_frp`) | `7000` |
+| `frp_auth_token` | FRP auth token (required in `vps_frp`) | `""` |
+| `ocm_api_key` | Optional OpenChargeMap API key | `""` |
+| `iternio_api_key` | Optional Iternio API key | `""` |
+| `monogoto_sms_delivery_webhook_enabled` | Enable webhook endpoint/logging | `false` |
 
-On your **router**, forward these ports to your **Home Assistant IP**:
+## Setup: Local Mode (`connection_mode: local`)
 
-| Port      | Protocol | Purpose                                                        |
-| --------- | -------- | -------------------------------------------------------------- |
-| **55230** | TCP      | TCU Direct Communication (Nissan protocol)                     |
-| **8124**  | TCP      | HTTP origin for car endpoint + browser UI + Home Assistant API |
-| **8125**  | TCP      | Optional direct HTTPS access to browser UI + API               |
+1. Keep `connection_mode: local`.
+2. Forward TCP `55230` on router to Home Assistant.
+3. Set `tcu_domain` to public hostname resolving to your home IP.
+4. Configure HTTP exposure for UI/API as you already do (e.g. `8124` origin + optional `8125`).
 
-### 3.5 Domain and URL setup
+## Setup: VPS + FRP Mode (`connection_mode: vps_frp`)
 
-Use explicit domains per traffic type:
+### 1. Install FRPS on VPS
 
-- HTTP domain (UI/API/Webhook): `ocw.example.com`
-- TCU domain (raw TCP 55230): `tcu.example.com`
-- Proxy/Tunnel origin: `http://<HA_IP>:8124`
+Example using FRP v0.64.0:
 
-You can set both fields to the same hostname if your setup is single-domain.
+```bash
+cd /opt
+curl -fsSL -o frp.tar.gz https://github.com/fatedier/frp/releases/download/v0.64.0/frp_0.64.0_linux_amd64.tar.gz
+tar -xzf frp.tar.gz
+sudo mv frp_0.64.0_linux_amd64/frps /usr/local/bin/frps
+sudo chmod +x /usr/local/bin/frps
+```
 
-Example:
+### 2. Create `/etc/frp/frps.toml`
+
+```toml
+bindPort = 7000
+
+auth.method = "token"
+auth.token = "replace-with-strong-random-token"
+
+[[proxies]]
+name = "ocw_tcu_55230"
+type = "tcp"
+remotePort = 55230
+```
+
+### 3. Create systemd service on VPS
+
+`/etc/systemd/system/frps.service`
+
+```ini
+[Unit]
+Description=FRP Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/frps -c /etc/frp/frps.toml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable/start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now frps
+sudo systemctl status frps
+```
+
+### 4. Open VPS firewall
+
+Allow inbound TCP `7000` and TCP `55230`.
+
+### 5. Set DNS
+
+Point `tcu_domain` to VPS public IP (A/AAAA record).
+
+### 6. Configure addon
 
 ```yaml
-http_domain: ocw.mydomain.com
-tcu_domain: tcu.duckdns.org
+connection_mode: vps_frp
+http_domain: ocw.example.com
+tcu_domain: tcu.example.com
+frp_server_addr: your-vps.example.com
+frp_server_port: 7000
+frp_auth_token: replace-with-strong-random-token
 ```
 
-### 3.6 Why HTTPS still works if origin uses HTTP `8124`
+### 7. Verify in logs
 
-For the recommended setup:
+On app start, look for FRP client startup log for VPS mode and verify FRPS shows connected client.
 
-- `8125` is completely optional.
-- The only tunnel/proxy origin you need is `http://<HA_IP>:8124`.
-- Use your public domain over HTTPS for browser and HA API.
-- The add-on handles routing for browser, API, and car endpoint behind port `8124`.
+## Car Configuration
 
-> [!IMPORTANT]
-> URLs with or without explicit ports depend on your external routing:
->
-> - **Cloudflare/reverse proxy mode** (proxy terminates HTTPS): usually use URLs **without** `:8125`.
-> - **Direct DuckDNS/port-forward mode** (you expose OCW directly): usually use `:8125` for HTTPS URLs.
+- Navi VFlash URL: `http://<http_domain>/WARCondelivbas/it-m_gw10/`
+- TCU Server URL: `<tcu_domain>`
 
-### 4. Start the app
+`/WARCondelivbas/it-m_gw10/` must be reachable over your HTTP path.
 
-Click **Start** and check the **Log** tab. You should see:
+## Ports
 
-```
-Starting Nginx HTTPS proxy...
-Starting OpenCarwings server with Daphne on port 8000...
-Starting OpenCarwings TCU Socket Server...
-```
-
-### 5. Initial Web UI Setup
-
-1. Open `https://your-domain.com` in your browser (or `https://your-domain.com:8125` for direct access without a proxy/tunnel).
-2. You will see a **security warning** (if using self-signed certificate) — accept/proceed.
-3. Create an admin account and add your vehicle via VIN.
-
-### 6. Configure Home Assistant Integration
-
-- Use your public HTTPS URL:
-  - `https://your-domain.com`
-- Point your reverse proxy/tunnel origin to `http://<HA_IP>:8124`.
-- API auth is preserved because `/api/*` is served directly on `8124` (no redirect hop).
-
-### 7. Configure Your Car
-
-Update your Nissan LEAF's **Navigation** and **TCU** settings:
-
-- **Navi VFlash URL**: `http://<http_domain>/WARCondelivbas/it-m_gw10/`
-- **TCU Server URL**: `<tcu_domain>`
-
-> [!NOTE]
-> The Navi VFlash URL must be reachable over HTTP on port `8124` and must include the exact path `/WARCondelivbas/it-m_gw10/`.
-
-> [!TIP]
-> **SSL & Domain Setup (Recommended)**
->
-> Use the two domains according to traffic type:
->
-> - `http_domain` (UI/API/Webhook): HTTPS endpoint for browser/API/webhook traffic.
-> - `tcu_domain` (TCU): raw TCP endpoint on port `55230` for the car.
->
-> Typical topologies:
->
-> - **Cloudflare/reverse proxy for HTTP + direct port-forward for TCU**:
->   - Proxy/tunnel `http_domain` to `http://<HA_IP>:8124` (Cloudflare handles SSL)
->   - Port-forward `55230` to Home Assistant for `tcu_domain`
-> - **DuckDNS + port-forward for both**:
->   - Use DuckDNS app for DDNS and Let's Encrypt certificates
->   - Expose `8125` for direct HTTPS on `http_domain`
->   - Expose `55230` for `tcu_domain`
->
-> **Example DuckDNS App (formerly Add-on) configuration**:
-
-> ```yaml
-> domains:
->   - [yoursubdomain].duckdns.org
-> token: YOUR_TOKEN_HERE
-> aliases: []
-> lets_encrypt:
->   accept_terms: true
->   algo: secp384r1
->   certfile: fullchain.pem
->   keyfile: privkey.pem
-> seconds: 300
-> ```
->
-> _Note: SSL certificates apply to HTTP(S) endpoints (`http_domain`). TCU traffic on port `55230` is raw TCP and separate from HTTPS._
-
----
-
-## Architecture
-
-```
-Internet → Router Port Forward → Home Assistant
-                                      │
-                          ┌───────────┴───────────┐
-                          │                       │
-                     Port 8124/8125          Port 55230
-                 (Nginx: car + UI/API)      (TCU Server)
-                          │
-                     Port 8000
-                   (Daphne/Django)
-                      │         │
-                 PostgreSQL    Redis
-```
-
-- **Nginx** enforces strict port roles:
-  - `8124`: single-domain compatible HTTP origin for car + UI + HA API
-  - `8125`: optional direct HTTPS access for UI/API
-- **Host allowlist** is built from `http_domain` + `tcu_domain`; unknown hosts are dropped.
-- **Daphne** runs the Django application on internal port 8000.
-- **TCU Server** listens on port 55230 for direct Nissan protocol communication.
-
-## Security behavior
-
-- Unknown host (`Host` not matching `http_domain` or `tcu_domain`): dropped.
-- Car endpoint `/WARCondelivbas/it-m_gw10/` on `8124` with non-car User-Agent: blocked (`403`).
-- Common exploit scan paths are dropped.
-
----
+| Port | Protocol | Purpose |
+| --- | --- | --- |
+| `55230` | TCP | TCU raw protocol (direct in `local`, relayed by FRP in `vps_frp`) |
+| `8124` | TCP | HTTP origin for car endpoint + UI + HA API |
+| `8125` | TCP | Optional direct HTTPS UI/API |
 
 ## Monogoto SMS Delivery Webhook
 
-If `monogoto_sms_delivery_webhook_enabled: true`, the app exposes:
+If `monogoto_sms_delivery_webhook_enabled: true`, endpoint is:
 
 - `POST /api/webhook/monogoto/sms-delivery/?token=ocw`
-- Cloudflare/reverse proxy example: `https://<http_domain>/api/webhook/monogoto/sms-delivery/?token=ocw`
-- Direct DuckDNS/port-forward example: `https://<http_domain>:8125/api/webhook/monogoto/sms-delivery/?token=ocw`
 
-Behavior:
+Examples:
 
-- Logs parsed webhook payloads at debug level.
-- Accepts both JSON object and JSON array payloads.
-- Matches car by ICCID (with tolerance for Monogoto one-digit-short ICCID).
-- Logs confirmation line:
-  - `[app] Monogoto webhook: SMS delivered`
-
-Startup convenience:
-
-- On startup, the app logs a copy-ready webhook URL using `http_domain`.
-
----
-
-## Versioning & Updates
-
-This app tracks the [upstream OpenCarwings](https://github.com/developerfromjokela/opencarwings) repository.
-
-- Our build process clones the latest upstream code whenever the app is rebuilt.
-- When new code is committed upstream, the app version number is bumped automatically.
-- Your Home Assistant will notify you of an "Update Available". You can choose when to update to pull in the latest upstream changes.
-
----
+- Reverse proxy: `https://<http_domain>/api/webhook/monogoto/sms-delivery/?token=ocw`
+- Direct HTTPS: `https://<http_domain>:8125/api/webhook/monogoto/sms-delivery/?token=ocw`
 
 ## Credits & Links
 
-- **Main Project**: [developerfromjokela/opencarwings](https://github.com/developerfromjokela/opencarwings)
-- **Special Thanks**: Huge thanks to `@developerfromjokela` for his incredible work reversing the Nissan protocol and keeping these cars online.
-- **Nissan TCU Protocol**: [nissan-leaf-tcu](https://github.com/developerfromjokela/nissan-leaf-tcu)
-- [**Guide to Bringing Your Navigator Back Online**](https://opencarwings.viaaq.eu/static/navi_guide.html)
-- [**Guide to Bringing Your TCU Back Online**](https://opencarwings.viaaq.eu/static/tcu_guide.html)
-- [**OCW Android app**](https://github.com/developerfromjokela/opencarwings-android)
-- **Issues**: Report app specific issues [on GitHub](https://github.com/Chaoscontrol/opencarwings-app/issues).
+- Main Project: [developerfromjokela/opencarwings](https://github.com/developerfromjokela/opencarwings)
+- Nissan TCU Protocol: [nissan-leaf-tcu](https://github.com/developerfromjokela/nissan-leaf-tcu)
+- Android App: [opencarwings-android](https://github.com/developerfromjokela/opencarwings-android)
+- Issues: [Chaoscontrol/opencarwings-app/issues](https://github.com/Chaoscontrol/opencarwings-app/issues)

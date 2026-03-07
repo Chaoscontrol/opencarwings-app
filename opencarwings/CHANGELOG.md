@@ -1,3 +1,10 @@
+## v0.0.21-1 - 2026-03-03 [Addon Patch]
+
+- Reintroduced optional FRP connectivity mode (`vps_frp`) for CGNAT users while keeping `local` as default.
+- Added addon options for FRP server address, FRP server port, and FRP auth token.
+- Added bundled FRP client runtime and dynamic `frpc` configuration generation for secure per-user VPS setup.
+- Updated root and addon READMEs with dual-mode guidance and full FRPS VPS setup instructions.
+
 ## v0.0.21 - 2026-02-23 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
