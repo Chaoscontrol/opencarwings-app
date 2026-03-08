@@ -1,3 +1,8 @@
+## v0.0.21-1 - 2026-03-08 [Addon Patch]
+
+- VPS+FRP option added back
+- Improvement: Timeouts promoted to WARNING
+
 ## v0.0.21-1 - 2026-03-03 [Addon Patch]
 
 - Reintroduced optional FRP connectivity mode (`vps_frp`) for CGNAT users while keeping `local` as default.
