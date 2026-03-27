@@ -1,3 +1,9 @@
+## v0.0.22 - 2026-03-27 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Update README.md (c1589a3)
+
 ## v0.0.21-1 - 2026-03-08 [Addon Patch]
 
 - VPS+FRP option added back
