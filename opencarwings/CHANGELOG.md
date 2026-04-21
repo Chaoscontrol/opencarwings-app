@@ -1,3 +1,11 @@
+## v0.0.23 - 2026-04-21 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Update README.md (3927dad)
+- Update README.md (118ac58)
+- Fix issue with OSM Referer problem (c7c87bb)
+
 ## v0.0.22 - 2026-03-27 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
