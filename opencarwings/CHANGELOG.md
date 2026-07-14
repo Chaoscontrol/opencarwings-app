@@ -1,3 +1,12 @@
+## v0.0.24 - 2026-07-14 [Upstream Update]
+
+Synced with latest upstream changes from opencarwings repository.
+
+- Fix redis timeout issue (797e6dc)
+- Fix osm tile referrer policy (0a70db0)
+- Merge remote-tracking branch 'origin/main' (4814987)
+- Improve checksum exception log info and make manytomanyfields optional (756fd6c)
+
 ## v0.0.23 - 2026-04-21 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
