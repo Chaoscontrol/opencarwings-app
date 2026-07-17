@@ -59,6 +59,13 @@ docker run --rm \
         for command in bashio curl dos2unix frpc git gosu nc nginx openssl pg_ctl postgres psql python3 redis-cli redis-server timeout; do
             command -v "$command" >/dev/null
         done
+        openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
+            -keyout /tmp/opencarwings-smoke.key \
+            -out /tmp/opencarwings-smoke.pem \
+            -subj "/CN=opencarwings-image-smoke" >/dev/null 2>&1
+        test -s /tmp/opencarwings-smoke.key
+        test -s /tmp/opencarwings-smoke.pem
+        rm -f /tmp/opencarwings-smoke.key /tmp/opencarwings-smoke.pem
     '
 
 test "$(docker image inspect --format '{{ index .Config.Labels "io.hass.type" }}' "$image")" = "addon"

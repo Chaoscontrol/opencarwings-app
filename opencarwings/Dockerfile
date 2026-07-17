@@ -30,9 +30,21 @@ RUN apk add --no-cache \
     pngquant \
     dos2unix \
     && ln -sf /usr/bin/libressl-openssl /usr/local/bin/openssl \
+    && printf '%s\n' \
+        '[req]' \
+        'distinguished_name = req_distinguished_name' \
+        '[req_distinguished_name]' \
+        > /etc/ssl/libressl.cnf \
     && python3 -m pip --version \
     && command -v openssl \
-    && openssl version
+    && openssl version \
+    && openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
+        -keyout /tmp/opencarwings-smoke.key \
+        -out /tmp/opencarwings-smoke.pem \
+        -subj '/CN=opencarwings-build-smoke' >/dev/null 2>&1 \
+    && test -s /tmp/opencarwings-smoke.key \
+    && test -s /tmp/opencarwings-smoke.pem \
+    && rm -f /tmp/opencarwings-smoke.key /tmp/opencarwings-smoke.pem
 
 # Clone OpenCarwings upstream
 COPY .upstream_sync /tmp/upstream_sync_marker
