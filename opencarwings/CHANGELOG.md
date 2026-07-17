@@ -1,3 +1,7 @@
+## v0.0.24-1 - 2026-07-17 [Addon Patch]
+
+- Repair v0.24 app build and release gates
+
 ## v0.0.24 - 2026-07-14 [Upstream Update]
 
 Synced with latest upstream changes from opencarwings repository.
