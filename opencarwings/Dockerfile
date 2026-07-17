@@ -1,45 +1,60 @@
-ARG BUILD_FROM
-FROM ${BUILD_FROM}
+FROM ghcr.io/hassio-addons/base:20.2.0
 
-# Install system dependencies
-RUN apk add --no-cache --upgrade \
-    libcrypto3 \
-    libssl3 \
+ARG BUILD_VERSION="0.0.0"
+ARG BUILD_ARCH="amd64"
+
+LABEL \
+    io.hass.type="addon" \
+    io.hass.name="OpenCarwings" \
+    io.hass.description="Nissan CARWINGS-compatible server" \
+    io.hass.url="https://github.com/Chaoscontrol/opencarwings-app" \
+    io.hass.version="${BUILD_VERSION}" \
+    io.hass.arch="${BUILD_ARCH}"
+
+# Install system dependencies. LibreSSL supplies the certificate-generation CLI
+# without upgrading the OpenSSL runtime libraries pinned by the base image.
+RUN apk add --no-cache \
     python3 \
     py3-pip \
-    postgresql \
-    postgresql-contrib \
+    py3-setuptools \
+    postgresql17 \
+    postgresql17-contrib \
     redis \
     git \
-    build-base \
-    python3-dev \
-    postgresql-dev \
     gosu \
-    postgresql-client \
+    postgresql17-client \
     curl \
-    libffi-dev \
-    openssl \
-    openssl-dev \
+    libressl \
     nginx \
+    netcat-openbsd \
     pngquant \
     dos2unix \
-    && python3 -m pip install --upgrade pip
+    && ln -sf /usr/bin/libressl-openssl /usr/local/bin/openssl \
+    && python3 -m pip --version \
+    && command -v openssl \
+    && openssl version
 
 # Clone OpenCarwings upstream
-ARG UPSTREAM_REF=main
-# Use the sync marker to invalidate cache when upstream has changes
 COPY .upstream_sync /tmp/upstream_sync_marker
 WORKDIR /opt
-RUN git clone --depth 1 --branch "${UPSTREAM_REF}" \
-    https://github.com/developerfromjokela/opencarwings.git opencarwings
+RUN test "$(wc -l < /tmp/upstream_sync_marker)" -eq 1 \
+    && grep -Eq '^[0-9a-f]{40}$' /tmp/upstream_sync_marker \
+    && UPSTREAM_COMMIT="$(cat /tmp/upstream_sync_marker)" \
+    && git init opencarwings \
+    && git -C opencarwings remote add origin https://github.com/developerfromjokela/opencarwings.git \
+    && git -C opencarwings fetch --depth 1 origin "${UPSTREAM_COMMIT}" \
+    && git -C opencarwings checkout --detach "${UPSTREAM_COMMIT}" \
+    && test "$(git -C opencarwings rev-parse HEAD)" = "${UPSTREAM_COMMIT}"
 
 # Install Python dependencies
 WORKDIR /opt/opencarwings
-RUN pip3 install -r requirements.txt psycopg2-binary \
+RUN python3 -m pip install --no-cache-dir --break-system-packages --only-binary=:all: \
+    -r requirements.txt psycopg2-binary \
     daphne channels channels-redis \
     django-crispy-forms crispy-tailwind \
     whitenoise djangorestframework djangorestframework-simplejwt \
-    django-mathfilters drf-yasg
+    django-mathfilters drf-yasg \
+    && python3 -m pip check
 
 # Install FRP client binary (frpc) for optional VPS relay mode.
 ARG FRP_VERSION=0.64.0

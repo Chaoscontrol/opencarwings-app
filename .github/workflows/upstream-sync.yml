@@ -5,6 +5,10 @@ on:
     - cron: "0 3 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: opencarwings-release
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -12,138 +16,144 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
+
+      - name: Verify release source
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = "main"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          test -z "$(git status --porcelain)"
 
       - name: Check for upstream changes
         id: check_upstream
         run: |
-          # Fetch latest upstream commit hash
-          LATEST_UPSTREAM=$(git ls-remote https://github.com/developerfromjokela/opencarwings.git HEAD | cut -f1)
+          set -euo pipefail
+          LATEST_UPSTREAM=$(git ls-remote \
+            https://github.com/developerfromjokela/opencarwings.git \
+            refs/heads/main | awk 'NR == 1 { print $1 }')
+          if [ "$(wc -l < opencarwings/.upstream_sync)" -ne 1 ]; then
+            echo "opencarwings/.upstream_sync must contain exactly one line" >&2
+            exit 1
+          fi
+          LAST_SYNC=$(cat opencarwings/.upstream_sync)
 
-          # Get last synced commit
-          if [ -f "opencarwings/.upstream_sync" ]; then
-            LAST_SYNC=$(cat opencarwings/.upstream_sync)
-          else
-            LAST_SYNC=""
+          if [[ ! "$LATEST_UPSTREAM" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Upstream main did not resolve to a valid commit SHA" >&2
+            exit 1
+          fi
+          if [[ ! "$LAST_SYNC" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "opencarwings/.upstream_sync is not a valid commit SHA" >&2
+            exit 1
           fi
 
+          echo "last_sync=$LAST_SYNC" >> "$GITHUB_OUTPUT"
+          echo "latest_upstream=$LATEST_UPSTREAM" >> "$GITHUB_OUTPUT"
           if [ "$LAST_SYNC" = "$LATEST_UPSTREAM" ]; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             echo "No new upstream changes"
           else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "last_sync=$LAST_SYNC" >> $GITHUB_OUTPUT
-            echo "latest_upstream=$LATEST_UPSTREAM" >> $GITHUB_OUTPUT
-            echo "New upstream changes detected"
-            echo "Last sync: $LAST_SYNC"
-            echo "Latest upstream: $LATEST_UPSTREAM"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "New upstream changes: $LAST_SYNC -> $LATEST_UPSTREAM"
           fi
 
-      - name: Get upstream changelog
+      - name: Get verified upstream changelog
         if: steps.check_upstream.outputs.has_changes == 'true'
-        id: upstream_log
+        env:
+          LAST_SYNC: ${{ steps.check_upstream.outputs.last_sync }}
+          LATEST_UPSTREAM: ${{ steps.check_upstream.outputs.latest_upstream }}
         run: |
-          LAST_SYNC="${{ steps.check_upstream.outputs.last_sync }}"
-
-          # Clone upstream to get commit history
-          git clone --bare https://github.com/developerfromjokela/opencarwings.git temp_upstream
-          cd temp_upstream
-
-          if [ -z "$LAST_SYNC" ]; then
-            # First sync - get last 10 commits
-            git log --pretty=format:"- %s (%h)" -10 > ../upstream_commits.txt
-          else
-            # Get commits since last sync
-            git log --pretty=format:"- %s (%h)" ${LAST_SYNC}..HEAD > ../upstream_commits.txt || {
-              echo "Could not get commit range, getting last 10 commits instead"
-              git log --pretty=format:"- %s (%h)" -10 > ../upstream_commits.txt
-            }
+          set -euo pipefail
+          git clone --filter=blob:none \
+            https://github.com/developerfromjokela/opencarwings.git temp_upstream
+          RESOLVED_HEAD=$(git -C temp_upstream rev-parse HEAD)
+          if [ "$RESOLVED_HEAD" != "$LATEST_UPSTREAM" ]; then
+            echo "Upstream main moved during verification; retry later" >&2
+            exit 1
           fi
-
-          cd ..
+          git -C temp_upstream cat-file -e "${LAST_SYNC}^{commit}"
+          git -C temp_upstream merge-base --is-ancestor "$LAST_SYNC" "$LATEST_UPSTREAM"
+          git -C temp_upstream log --pretty=format:'- %s (%h)' \
+            "${LAST_SYNC}..${LATEST_UPSTREAM}" > upstream_commits.txt
+          test -s upstream_commits.txt
           rm -rf temp_upstream
 
       - name: Get current version
         if: steps.check_upstream.outputs.has_changes == 'true'
         id: current_version
         run: |
-          if grep -q '^version:' opencarwings/config.yaml; then
-            VERSION=$(grep '^version:' opencarwings/config.yaml | sed 's/version: "\(.*\)"/\1/')
-          else
-            VERSION="0.0.0"
+          set -euo pipefail
+          VERSION=$(sed -nE 's/^version: "([^"]+)"$/\1/p' opencarwings/config.yaml)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]; then
+            echo "Invalid current version: $VERSION" >&2
+            exit 1
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Current version: $VERSION"
 
       - name: Bump base version
         if: steps.check_upstream.outputs.has_changes == 'true'
         id: bump_version
+        env:
+          CURRENT_VERSION: ${{ steps.current_version.outputs.version }}
         run: |
-          CURRENT="${{ steps.current_version.outputs.version }}"
-
-          # Strip addon patch if it exists (0.0.2-3 -> 0.0.2)
-          if [[ "$CURRENT" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
-            BASE="${BASH_REMATCH[1]}"
-          elif [[ "$CURRENT" =~ ^([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            BASE="$CURRENT"
+          set -euo pipefail
+          if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9]+)?$ ]]; then
+            NEW_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
           else
-            BASE="0.0.0"
+            echo "Cannot bump invalid version: $CURRENT_VERSION" >&2
+            exit 1
           fi
-
-          # Bump patch of base version
-          IFS='.' read -r major minor patch <<< "$BASE"
-          NEW_VERSION="${major}.${minor}.$((patch + 1))"
-
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "New upstream version: $NEW_VERSION"
 
-      - name: Update changelog
+      - name: Update release files
         if: steps.check_upstream.outputs.has_changes == 'true'
+        env:
+          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
+          LATEST_UPSTREAM: ${{ steps.check_upstream.outputs.latest_upstream }}
         run: |
-          NEW_VERSION="${{ steps.bump_version.outputs.new_version }}"
-
+          set -euo pipefail
           {
             echo "## v${NEW_VERSION} - $(date +%Y-%m-%d) [Upstream Update]"
-            echo ""
+            echo
             echo "Synced with latest upstream changes from opencarwings repository."
-            echo ""
+            echo
             cat upstream_commits.txt
-            echo ""
-            echo ""
+            echo
+            echo
           } > new_changes.md
-
-          if [ -f "opencarwings/CHANGELOG.md" ]; then
-            cat new_changes.md opencarwings/CHANGELOG.md > temp.md
-            mv temp.md opencarwings/CHANGELOG.md
-          else
-            echo "# Changelog" > opencarwings/CHANGELOG.md
-            echo "" >> opencarwings/CHANGELOG.md
-            cat new_changes.md >> opencarwings/CHANGELOG.md
-          fi
-
-      - name: Update version in config.yaml
-        if: steps.check_upstream.outputs.has_changes == 'true'
-        run: |
-          NEW_VERSION="${{ steps.bump_version.outputs.new_version }}"
+          cat new_changes.md opencarwings/CHANGELOG.md > temp.md
+          mv temp.md opencarwings/CHANGELOG.md
           sed -i "s/^version: .*/version: \"$NEW_VERSION\"/" opencarwings/config.yaml
+          printf '%s\n' "$LATEST_UPSTREAM" > opencarwings/.upstream_sync
 
-      - name: Update sync marker
+      - name: Build and smoke-test amd64 image
         if: steps.check_upstream.outputs.has_changes == 'true'
-        run: |
-          LATEST_UPSTREAM="${{ steps.check_upstream.outputs.latest_upstream }}"
-          echo "$LATEST_UPSTREAM" > opencarwings/.upstream_sync
+        env:
+          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
+        run: .github/scripts/build-smoke-test.sh "$NEW_VERSION"
 
-      - name: Commit and push
+      - name: Commit, tag, and atomically publish
         if: steps.check_upstream.outputs.has_changes == 'true'
+        env:
+          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
         run: |
-          NEW_VERSION="${{ steps.bump_version.outputs.new_version }}"
+          set -euo pipefail
+          TAG="v${NEW_VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Remote tag ${TAG} already exists; refusing to overwrite it" >&2
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add opencarwings/config.yaml opencarwings/CHANGELOG.md opencarwings/.upstream_sync
+          git diff --cached --check
+          git diff --cached --quiet && { echo "No release changes to commit" >&2; exit 1; }
           git commit -m "Upstream sync - v${NEW_VERSION}"
-          git tag "v${NEW_VERSION}"
-          git push origin main
-          git push origin "v${NEW_VERSION}"
+          git tag "$TAG"
+          git push --atomic origin HEAD:main "refs/tags/${TAG}"

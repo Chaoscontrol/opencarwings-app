@@ -5,6 +5,10 @@ on:
     - cron: "0 2 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: opencarwings-release
+  cancel-in-progress: false
+
 jobs:
   bump:
     runs-on: ubuntu-latest
@@ -12,26 +16,36 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
-      - name: Check for changes
+      - name: Verify release source
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = "main"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          test -z "$(git status --porcelain)"
+
+      - name: Check for add-on changes
         id: check_changes
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          set -euo pipefail
+          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
           if [ -z "$LAST_TAG" ]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
           else
-            # Only check for non-upstream commits
-            CHANGES=$(git log ${LAST_TAG}..HEAD --oneline --grep="Sync with upstream" --invert-grep | wc -l)
+            # Upstream release commits use the exact subject "Upstream sync - v...".
+            CHANGES=$(git log "${LAST_TAG}..HEAD" --format='%H' \
+              --grep='^Upstream sync - v[0-9]' --invert-grep | wc -l)
             if [ "$CHANGES" -gt 0 ]; then
-              echo "has_changes=true" >> $GITHUB_OUTPUT
-              echo "Found $CHANGES addon commits since last version"
+              echo "has_changes=true" >> "$GITHUB_OUTPUT"
+              echo "Found $CHANGES add-on commits since $LAST_TAG"
             else
-              echo "has_changes=false" >> $GITHUB_OUTPUT
-              echo "No addon changes, skipping bump"
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+              echo "No add-on changes, skipping bump"
             fi
           fi
 
@@ -39,81 +53,85 @@ jobs:
         if: steps.check_changes.outputs.has_changes == 'true'
         id: current_version
         run: |
-          if grep -q '^version:' opencarwings/config.yaml; then
-            VERSION=$(grep '^version:' opencarwings/config.yaml | sed 's/version: "\(.*\)"/\1/')
-          else
-            VERSION="0.0.0"
+          set -euo pipefail
+          VERSION=$(sed -nE 's/^version: "([^"]+)"$/\1/p' opencarwings/config.yaml)
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]; then
+            echo "Invalid current version: $VERSION" >&2
+            exit 1
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Current version: $VERSION"
 
-      - name: Bump addon patch version
+      - name: Bump add-on patch version
         if: steps.check_changes.outputs.has_changes == 'true'
         id: bump_version
+        env:
+          CURRENT_VERSION: ${{ steps.current_version.outputs.version }}
         run: |
-          CURRENT="${{ steps.current_version.outputs.version }}"
-
-          # Check if version has addon patch (e.g., 0.0.2-3)
-          if [[ "$CURRENT" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
-            BASE="${BASH_REMATCH[1]}"
-            PATCH="${BASH_REMATCH[2]}"
-            NEW_VERSION="${BASE}-$((PATCH + 1))"
-          elif [[ "$CURRENT" =~ ^([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            # No addon patch yet, add -1
-            NEW_VERSION="${CURRENT}-1"
+          set -euo pipefail
+          if [[ "$CURRENT_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
+            NEW_VERSION="${BASH_REMATCH[1]}-$((BASH_REMATCH[2] + 1))"
+          elif [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            NEW_VERSION="${CURRENT_VERSION}-1"
           else
-            # Fallback
-            NEW_VERSION="0.0.1-1"
+            echo "Cannot bump invalid version: $CURRENT_VERSION" >&2
+            exit 1
           fi
-
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "New addon patch version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "New add-on patch version: $NEW_VERSION"
 
       - name: Generate changelog
         if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
         run: |
-          NEW_VERSION="${{ steps.bump_version.outputs.new_version }}"
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
+          set -euo pipefail
+          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
           {
             echo "## v${NEW_VERSION} - $(date +%Y-%m-%d) [Addon Patch]"
-            echo ""
+            echo
             if [ -z "$LAST_TAG" ]; then
-              git log --pretty=format:"- %s" --grep="Sync with upstream" --invert-grep
+              git log --pretty=format:'- %s' --grep='^Upstream sync - v[0-9]' --invert-grep
             else
-              git log ${LAST_TAG}..HEAD --pretty=format:"- %s" --grep="Sync with upstream" --invert-grep
+              git log "${LAST_TAG}..HEAD" --pretty=format:'- %s' \
+                --grep='^Upstream sync - v[0-9]' --invert-grep
             fi
-            echo ""
-            echo ""
+            echo
+            echo
           } > new_changes.md
-
-          if [ -f "opencarwings/CHANGELOG.md" ]; then
-            cat new_changes.md opencarwings/CHANGELOG.md > temp.md
-            mv temp.md opencarwings/CHANGELOG.md
-          else
-            echo "# Changelog" > opencarwings/CHANGELOG.md
-            echo "" >> opencarwings/CHANGELOG.md
-            cat new_changes.md >> opencarwings/CHANGELOG.md
-          fi
+          cat new_changes.md opencarwings/CHANGELOG.md > temp.md
+          mv temp.md opencarwings/CHANGELOG.md
 
       - name: Update config.yaml
         if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
         run: |
-          NEW_VERSION="${{ steps.bump_version.outputs.new_version }}"
-          if grep -q '^version:' opencarwings/config.yaml; then
-            sed -i "s/^version: .*/version: \"$NEW_VERSION\"/" opencarwings/config.yaml
-          else
-            sed -i '1s/^/version: "'"$NEW_VERSION"'"\n/' opencarwings/config.yaml
-          fi
+          set -euo pipefail
+          sed -i "s/^version: .*/version: \"$NEW_VERSION\"/" opencarwings/config.yaml
 
-      - name: Commit and push
+      - name: Build and smoke-test amd64 image
         if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
+        run: .github/scripts/build-smoke-test.sh "$NEW_VERSION"
+
+      - name: Commit, tag, and atomically publish
+        if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
         run: |
-          NEW_VERSION="${{ steps.bump_version.outputs.new_version }}"
+          set -euo pipefail
+          TAG="v${NEW_VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Remote tag ${TAG} already exists; refusing to overwrite it" >&2
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add opencarwings/config.yaml opencarwings/CHANGELOG.md
+          git diff --cached --check
+          git diff --cached --quiet && { echo "No release changes to commit" >&2; exit 1; }
           git commit -m "Bump addon version to v${NEW_VERSION}"
-          git tag "v${NEW_VERSION}"
-          git push origin main
-          git push origin "v${NEW_VERSION}"
+          git tag "$TAG"
+          git push --atomic origin HEAD:main "refs/tags/${TAG}"

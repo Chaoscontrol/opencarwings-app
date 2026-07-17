@@ -4,6 +4,17 @@ source /etc/cont-init.d/00-log-fix.sh
 
 bashio::log.info "=== Starting PostgreSQL and Redis Setup ==="
 
+# Never let a new PostgreSQL binary touch an incompatible persistent cluster.
+EXPECTED_PG_MAJOR="17"
+if [ -f "/data/postgres/PG_VERSION" ]; then
+    ACTUAL_PG_MAJOR="$(cat /data/postgres/PG_VERSION)"
+    if ! grep -qx "$EXPECTED_PG_MAJOR" /data/postgres/PG_VERSION; then
+        bashio::log.error "Existing PostgreSQL data is version ${ACTUAL_PG_MAJOR}; this app requires version ${EXPECTED_PG_MAJOR}. Restore the previous app version and migrate from a verified backup before retrying."
+        exit 1
+    fi
+    bashio::log.info "Verified existing PostgreSQL ${ACTUAL_PG_MAJOR} data directory"
+fi
+
 # Create PostgreSQL directories and set permissions
 bashio::log.info "Creating PostgreSQL directories..."
 mkdir -p /data/postgres /run/postgresql
