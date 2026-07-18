@@ -57,6 +57,57 @@ Important scope note:
 2. Add `https://github.com/Chaoscontrol/opencarwings-app`.
 3. Install **OpenCarwings**.
 
+## Maintenance and development workflow
+
+Use the GitHub-installed `OpenCarwings` app for normal operation. The local
+`OpenCarwings (Local Dev)` app is a disposable validation target: keep it
+stopped with boot mode `manual`, automatic updates disabled, and isolated host
+ports (`18124` HTTP, `18125` HTTPS, `55231` TCU) unless an exclusive TCU/FRP
+cutover is being tested.
+
+GitHub `main` is the source of truth. Never edit the Home Assistant local add-on
+folder directly. From Windows PowerShell, deploy one controlled snapshot of the
+current branch with:
+
+```powershell
+.\scripts\deploy-opencarwings-dev.ps1 -ConfirmDevStopped
+```
+
+The command fetches `origin`, refuses a branch that does not contain current
+`origin/main`, stages and verifies the complete add-on tree, and changes only
+the local app name and slug. Intentional uncommitted add-on changes require the
+explicit `-AllowDirty` switch and are listed before deployment. Host port
+mappings and runtime options are Supervisor configuration, not source-tree
+differences; verify them before every dev start. `-ConfirmDevStopped` is an
+explicit operator assertion, so check Supervisor reports the dev app stopped.
+Use `-DryRun` first after a long maintenance gap.
+
+After a long maintenance gap:
+
+1. Fetch with pruning and tags, then fast-forward local `main`.
+2. Create a short-lived branch from `main`.
+3. For an upstream update, change `.upstream_sync` to the exact 40-character
+   upstream commit on that branch before deploying it.
+4. Stop dev, deploy once, refresh the local store, and rebuild dev.
+5. Verify dev on isolated ports; use an exclusive cutover only for real TCU/FRP testing.
+6. Commit and push the tested source.
+7. Manually run the appropriate release workflow, confirm `dev_validated`, and enter the exact tested commit SHA.
+8. Back up and manually update the official app only after the release build passes.
+
+Configure the GitHub environment `opencarwings-release` with required reviewers;
+the write-capable publish job targets that environment after the read-only image
+gate succeeds.
+
+Branch and pull-request CI builds the full amd64 image and runs smoke assertions
+without publishing. Upstream and add-on patch releases are manual-only. Upstream
+base releases use `0.0.X`; add-on-only fixes use `0.0.X-N`.
+
+The ignored `upstream-opencarwings/` clone is disposable reference material,
+never a source or release authority.
+
+The backup, one-time data consolidation, validation, and rollback procedure is
+documented in [`docs/maintenance.md`](docs/maintenance.md).
+
 ## App Configuration
 
 | Option | Description | Default |

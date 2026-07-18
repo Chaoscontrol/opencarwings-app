@@ -13,6 +13,9 @@ LABEL \
 
 # Install system dependencies. LibreSSL supplies the certificate-generation CLI
 # without upgrading the OpenSSL runtime libraries pinned by the base image.
+# postgresql17-dev is intentionally omitted: psycopg2-binary does not compile
+# against it, and the available dev dependency set pulls openssl-dev newer than
+# the runtime pinned by base 20.2.0, making apk reject the valid runtime image.
 RUN apk add --no-cache \
     python3 \
     py3-pip \

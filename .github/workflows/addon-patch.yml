@@ -1,19 +1,36 @@
-name: Daily Version Bump
+name: Release Add-on Patch
 
 on:
-  schedule:
-    - cron: "0 2 * * *"
   workflow_dispatch:
+    inputs:
+      dev_validated:
+        description: Confirm this exact source was rebuilt and validated in local_opencarwings-dev
+        required: true
+        type: boolean
+      tested_commit:
+        description: Full 40-character commit SHA that was validated in local_opencarwings-dev
+        required: true
+        type: string
+      recover_missing_tag:
+        description: Optional tag (for example v0.0.24-3) to recover when main was published but its tag is missing
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: opencarwings-release
   cancel-in-progress: false
 
 jobs:
-  bump:
+  prepare:
+    if: inputs.recover_missing_tag == ''
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      base_sha: ${{ steps.release_source.outputs.base_sha }}
+      has_changes: ${{ steps.check_changes.outputs.has_changes }}
+      new_version: ${{ steps.bump_version.outputs.new_version }}
 
     steps:
       - name: Checkout main
@@ -21,13 +38,22 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify release source
+        id: release_source
+        env:
+          DEV_VALIDATED: ${{ inputs.dev_validated }}
+          TESTED_COMMIT: ${{ inputs.tested_commit }}
         run: |
           set -euo pipefail
+          test "$DEV_VALIDATED" = "true"
+          [[ "$TESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           test "$(git branch --show-current)" = "main"
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          test "$(git rev-parse HEAD)" = "$TESTED_COMMIT"
           test -z "$(git status --porcelain)"
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Check for add-on changes
         id: check_changes
@@ -114,14 +140,61 @@ jobs:
         if: steps.check_changes.outputs.has_changes == 'true'
         env:
           NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
-        run: .github/scripts/build-smoke-test.sh "$NEW_VERSION"
-
-      - name: Commit, tag, and atomically publish
-        if: steps.check_changes.outputs.has_changes == 'true'
-        env:
-          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
         run: |
           set -euo pipefail
+          ruby .github/scripts/validate-metadata.rb
+          .github/scripts/build-smoke-test.sh "$NEW_VERSION"
+
+      - name: Stage verified release artifact
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifact/opencarwings
+          cp opencarwings/config.yaml release-artifact/opencarwings/config.yaml
+          cp opencarwings/CHANGELOG.md release-artifact/opencarwings/CHANGELOG.md
+
+      - name: Upload verified release files
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: addon-patch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifact/
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: prepare
+    if: needs.prepare.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    environment: opencarwings-release
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the exact tested main commit
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download verified release files
+        uses: actions/download-artifact@v4
+        with:
+          name: addon-patch-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .
+
+      - name: Commit, tag, and atomically publish
+        env:
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+          NEW_VERSION: ${{ needs.prepare.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          git fetch origin main --tags
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          test "$(sed -nE 's/^version: "([^"]+)"$/\1/p' opencarwings/config.yaml)" = "$NEW_VERSION"
+          test "$(git diff --name-only | sort)" = $'opencarwings/CHANGELOG.md\nopencarwings/config.yaml'
+          git diff --check
+
           TAG="v${NEW_VERSION}"
           if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "Remote tag ${TAG} already exists; refusing to overwrite it" >&2
@@ -133,5 +206,88 @@ jobs:
           git diff --cached --check
           git diff --cached --quiet && { echo "No release changes to commit" >&2; exit 1; }
           git commit -m "Bump addon version to v${NEW_VERSION}"
+          test "$(git rev-parse HEAD^)" = "$BASE_SHA"
           git tag "$TAG"
           git push --atomic origin HEAD:main "refs/tags/${TAG}"
+
+  recover-prepare:
+    if: inputs.recover_missing_tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.recovery.outputs.source_sha }}
+      tag: ${{ steps.recovery.outputs.tag }}
+      version: ${{ steps.recovery.outputs.version }}
+    steps:
+      - name: Checkout main without publish credentials
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag-only patch recovery
+        id: recovery
+        env:
+          DEV_VALIDATED: ${{ inputs.dev_validated }}
+          TESTED_COMMIT: ${{ inputs.tested_commit }}
+          RECOVERY_TAG: ${{ inputs.recover_missing_tag }}
+        run: |
+          set -euo pipefail
+          test "$DEV_VALIDATED" = "true"
+          [[ "$TESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RECOVERY_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          test "$(git rev-parse HEAD)" = "$TESTED_COMMIT"
+          VERSION="${RECOVERY_TAG#v}"
+          test "$(sed -nE 's/^version: "([^"]+)"$/\1/p' opencarwings/config.yaml)" = "$VERSION"
+          test "$(git log -1 --pretty=%s)" = "Bump addon version to v${VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${RECOVERY_TAG}" >/dev/null 2>&1; then
+            echo "Remote tag already exists; refusing recovery" >&2
+            exit 1
+          fi
+          echo "source_sha=$TESTED_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "tag=$RECOVERY_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Rebuild and smoke-test exact untagged release
+        env:
+          VERSION: ${{ steps.recovery.outputs.version }}
+        run: |
+          set -euo pipefail
+          ruby .github/scripts/validate-metadata.rb
+          .github/scripts/build-smoke-test.sh "$VERSION"
+
+  recover-publish:
+    needs: recover-prepare
+    if: needs.recover-prepare.result == 'success'
+    runs-on: ubuntu-latest
+    environment: opencarwings-release
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout exact untagged release
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Publish only the missing tag
+        env:
+          SOURCE_SHA: ${{ needs.recover-prepare.outputs.source_sha }}
+          TAG: ${{ needs.recover-prepare.outputs.tag }}
+          VERSION: ${{ needs.recover-prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git fetch origin main --tags
+          test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+          test "$(sed -nE 's/^version: "([^"]+)"$/\1/p' opencarwings/config.yaml)" = "$VERSION"
+          test "$(git log -1 --pretty=%s)" = "Bump addon version to v${VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Remote tag already exists; refusing recovery" >&2
+            exit 1
+          fi
+          git tag "$TAG" "$SOURCE_SHA"
+          git push origin "refs/tags/${TAG}"

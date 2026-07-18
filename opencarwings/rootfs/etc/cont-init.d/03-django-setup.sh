@@ -206,16 +206,23 @@ fi
 bashio::log.info "Waiting for local database to be ready..."
 sleep 5
 
-# Try to run Django migrations
+# Run Django migrations. A schema mismatch must stop the app instead of
+# launching services against partially migrated persistent data.
 bashio::log.info "Running Django migrations..."
 if python manage.py migrate --noinput 2>&1; then
     bashio::log.info "Django migrations completed successfully"
 else
-    bashio::log.warning "Django migrations failed, but continuing..."
+    bashio::log.error "Django migrations failed; refusing to start services"
+    exit 1
 fi
 
 # Collect static files
 bashio::log.info "Collecting static files..."
-python manage.py collectstatic --noinput --clear 2>/dev/null || true
+if python manage.py collectstatic --noinput --clear 2>&1; then
+    bashio::log.info "Static files collected successfully"
+else
+    bashio::log.error "Static file collection failed; refusing to start services"
+    exit 1
+fi
 
 bashio::log.info "Django setup completed"

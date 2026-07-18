@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.log
+postgres/
+redis/
+backups/
