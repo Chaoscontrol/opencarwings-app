@@ -1,3 +1,7 @@
+## v0.0.24-3 - 2026-07-18 [Addon Patch]
+
+- Harden dev deployment and release workflow
+
 ## v0.0.24-2 - 2026-07-17 [Addon Patch]
 
 - Fix fresh TLS certificate generation
