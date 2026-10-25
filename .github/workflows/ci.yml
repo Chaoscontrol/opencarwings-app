@@ -49,5 +49,8 @@ jobs:
           fi
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Test automatic release preparation
+        run: PYTHONDONTWRITEBYTECODE=1 python3 .github/scripts/test-prepare-upstream-release.py
+
       - name: Build and smoke-test amd64 image
         run: .github/scripts/build-smoke-test.sh "${{ steps.version.outputs.value }}"

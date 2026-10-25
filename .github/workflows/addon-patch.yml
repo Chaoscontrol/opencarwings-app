@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       recover_missing_tag:
-        description: Optional tag (for example v0.0.24-3) to recover when main was published but its tag is missing
+        description: Optional tag (for example v0.0.26) to recover when main was published but its tag is missing
         required: false
         default: ""
         type: string
@@ -63,6 +63,11 @@ jobs:
           if [ -z "$LAST_TAG" ]; then
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
           else
+            LAST_SYNC=$(git show "${LAST_TAG}:opencarwings/.upstream_sync")
+            if [ "$LAST_SYNC" != "$(cat opencarwings/.upstream_sync)" ]; then
+              echo "Upstream marker changed; publish through the upstream release workflow first" >&2
+              exit 1
+            fi
             # Upstream release commits use the exact subject "Upstream sync - v...".
             CHANGES=$(git log "${LAST_TAG}..HEAD" --format='%H' \
               --grep='^Upstream sync - v[0-9]' --invert-grep | wc -l)
@@ -95,10 +100,8 @@ jobs:
           CURRENT_VERSION: ${{ steps.current_version.outputs.version }}
         run: |
           set -euo pipefail
-          if [[ "$CURRENT_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
-            NEW_VERSION="${BASH_REMATCH[1]}-$((BASH_REMATCH[2] + 1))"
-          elif [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            NEW_VERSION="${CURRENT_VERSION}-1"
+          if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9]+)?$ ]]; then
+            NEW_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
           else
             echo "Cannot bump invalid version: $CURRENT_VERSION" >&2
             exit 1

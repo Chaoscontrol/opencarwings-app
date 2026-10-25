@@ -1,5 +1,6 @@
 #!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
+set -e
 source /etc/cont-init.d/00-log-fix.sh
 
 bashio::log.info "Running runtime patch for Django settings..."
@@ -57,7 +58,12 @@ if MIDDLEWARE_TO_ADD not in MIDDLEWARE:
         MIDDLEWARE.insert(0, MIDDLEWARE_TO_ADD)
 
 # Enabled compression/caching
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Preserve the default media storage while configuring Django's current API.
+from django.conf import global_settings
+STORAGES = dict(globals().get('STORAGES', global_settings.STORAGES))
+# Upstream vendor JS references source maps it does not ship. Use compression
+# without manifest rewriting so those debug-only references cannot break startup.
+STORAGES['staticfiles'] = {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'}
 EOF
 else
     bashio::log.info "settings.py already patched for Static Files."
@@ -133,7 +139,7 @@ class AppColorFormatter(logging.Formatter):
             tag = "[daphne]"
             msg = msg.strip()
         # 2) Source-based default tags
-        elif "tculink.management.commands.tcuserver" in record.name:
+        elif record.name == "tcuserver" or "tculink.management.commands.tcuserver" in record.name:
             tag = "[tcuserver]"
         elif "tculink" in record.name:
             tag = "[app]"
@@ -265,7 +271,14 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("localhost", 6379)],
+            # Channels waits in blocking Redis receives. redis-py 8 defaults
+            # reads to 5 seconds, racing Channels' own 5-second blocking poll
+            # and killing otherwise healthy idle notification websockets.
+            "hosts": [{
+                "address": "redis://localhost:6379",
+                "socket_timeout": None,
+                "socket_connect_timeout": 5,
+            }],
         },
     },
 }
@@ -987,10 +1000,7 @@ pi_changed = patch_file(
 crm_changed = patch_file(
     "/opt/opencarwings/tculink/carwings_proto/probe_crm.py",
     [
-        ('parsingblocks = []', 'parsingblocks = []\n    mismatch_block_size_count = 0'),
         ('logger.info("-- Start parsing crmblocks --")', 'logger.debug("-- Start parsing crmblocks --")'),
-        ('logger.warning("WARN! mismatch block size")', 'mismatch_block_size_count += 1\n                logger.trace("WARN! mismatch block size")'),
-        ('    return parse_result', '    if mismatch_block_size_count > 0:\n        logger.warning("CRM parse block-size mismatches: %d", mismatch_block_size_count)\n    return parse_result'),
     ],
 )
 
@@ -1015,7 +1025,7 @@ if dj_changed:
 if pi_changed:
     print("[INFO] pi.py verbose info lines demoted")
 if crm_changed:
-    print("[INFO] probe_crm.py mismatch warnings aggregated")
+    print("[INFO] probe_crm.py start message demoted; upstream parser warnings preserved")
 if autodj_changed:
     print("[INFO] autodj/opencarwings.py print/debug spam demoted")
 if not any([views_changed, dbuf_changed, cp_changed, dj_changed, pi_changed, crm_changed, autodj_changed]):
@@ -1024,6 +1034,11 @@ EOF
 else
     bashio::log.warning "Car request log tuning files not found, skipping V2 log patch."
 fi
+
+# Validate every source file after all compatibility patches, before services start.
+python3 -m compileall -q /opt/opencarwings/api /opt/opencarwings/carwings /opt/opencarwings/db /opt/opencarwings/tculink /opt/opencarwings/ui
+python3 /opt/opencarwings/manage.py check
+python3 /opt/opencarwings/manage.py collectstatic --noinput --clear
 
 # --- Patch 11: Clear stale commands on startup ---
 # If the addon restarted while a command was in "delivered, awaiting response"

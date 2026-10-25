@@ -1,21 +1,42 @@
 name: Release Upstream Update
 
 on:
+  schedule:
+    - cron: "17 3 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "opencarwings/**"
+      - ".github/workflows/upstream-sync.yml"
+      - ".github/scripts/prepare-upstream-release.py"
   workflow_dispatch:
     inputs:
-      dev_validated:
-        description: Confirm this exact source was rebuilt and validated in local_opencarwings-dev
-        required: true
-        type: boolean
-      tested_commit:
-        description: Full 40-character commit SHA that was validated in local_opencarwings-dev
-        required: true
-        type: string
-      recover_missing_tag:
-        description: Optional tag (for example v0.0.25) to recover when main was published but its tag is missing
+      target_upstream:
+        description: Optional full upstream SHA; otherwise follow main (pushes release the checked-in pin)
         required: false
         default: ""
         type: string
+      recover_missing_tag:
+        description: Optional missing tag to recover from an existing upstream release commit
+        required: false
+        default: ""
+        type: string
+      dev_validated:
+        description: Required only for tag recovery; confirm this exact app source was tested in dev
+        required: false
+        default: false
+        type: boolean
+      tested_commit:
+        description: Required only for tag recovery; full tested app commit SHA
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
 
 concurrency:
   group: opencarwings-release
@@ -23,221 +44,16 @@ concurrency:
 
 jobs:
   prepare:
-    if: inputs.recover_missing_tag == ''
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     outputs:
-      base_sha: ${{ steps.release_source.outputs.base_sha }}
-      has_changes: ${{ steps.check_upstream.outputs.has_changes }}
-      new_version: ${{ steps.bump_version.outputs.new_version }}
-
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Verify release source
-        id: release_source
-        env:
-          DEV_VALIDATED: ${{ inputs.dev_validated }}
-          TESTED_COMMIT: ${{ inputs.tested_commit }}
-        run: |
-          set -euo pipefail
-          test "$DEV_VALIDATED" = "true"
-          [[ "$TESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git branch --show-current)" = "main"
-          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-          test "$(git rev-parse HEAD)" = "$TESTED_COMMIT"
-          test -z "$(git status --porcelain)"
-          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Check for upstream changes
-        id: check_upstream
-        run: |
-          set -euo pipefail
-          if [ "$(wc -l < opencarwings/.upstream_sync)" -ne 1 ]; then
-            echo "opencarwings/.upstream_sync must contain exactly one line" >&2
-            exit 1
-          fi
-          TARGET_UPSTREAM=$(cat opencarwings/.upstream_sync)
-          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
-          if [ -z "$LAST_TAG" ]; then
-            echo "An existing release tag is required for an upstream update" >&2
-            exit 1
-          fi
-          LAST_SYNC=$(git show "${LAST_TAG}:opencarwings/.upstream_sync")
-
-          if [[ ! "$LAST_SYNC" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Last release contains an invalid upstream marker" >&2
-            exit 1
-          fi
-          if [[ ! "$TARGET_UPSTREAM" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Tested opencarwings/.upstream_sync is not a valid commit SHA" >&2
-            exit 1
-          fi
-
-          echo "last_sync=$LAST_SYNC" >> "$GITHUB_OUTPUT"
-          echo "target_upstream=$TARGET_UPSTREAM" >> "$GITHUB_OUTPUT"
-          if [ "$LAST_SYNC" = "$TARGET_UPSTREAM" ]; then
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo "The tested commit does not advance the upstream marker"
-          else
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "Tested upstream update: $LAST_SYNC -> $TARGET_UPSTREAM"
-          fi
-
-      - name: Get verified upstream changelog
-        if: steps.check_upstream.outputs.has_changes == 'true'
-        env:
-          LAST_SYNC: ${{ steps.check_upstream.outputs.last_sync }}
-          TARGET_UPSTREAM: ${{ steps.check_upstream.outputs.target_upstream }}
-        run: |
-          set -euo pipefail
-          git clone --filter=blob:none \
-            https://github.com/developerfromjokela/opencarwings.git temp_upstream
-          git -C temp_upstream cat-file -e "${LAST_SYNC}^{commit}"
-          git -C temp_upstream cat-file -e "${TARGET_UPSTREAM}^{commit}"
-          git -C temp_upstream merge-base --is-ancestor "$LAST_SYNC" "$TARGET_UPSTREAM"
-          git -C temp_upstream log --pretty=format:'- %s (%h)' \
-            "${LAST_SYNC}..${TARGET_UPSTREAM}" > upstream_commits.txt
-          test -s upstream_commits.txt
-          rm -rf temp_upstream
-
-      - name: Get current version
-        if: steps.check_upstream.outputs.has_changes == 'true'
-        id: current_version
-        run: |
-          set -euo pipefail
-          VERSION=$(sed -nE 's/^version: "([^"]+)"$/\1/p' opencarwings/config.yaml)
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]; then
-            echo "Invalid current version: $VERSION" >&2
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Current version: $VERSION"
-
-      - name: Bump base version
-        if: steps.check_upstream.outputs.has_changes == 'true'
-        id: bump_version
-        env:
-          CURRENT_VERSION: ${{ steps.current_version.outputs.version }}
-        run: |
-          set -euo pipefail
-          if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9]+)?$ ]]; then
-            NEW_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
-          else
-            echo "Cannot bump invalid version: $CURRENT_VERSION" >&2
-            exit 1
-          fi
-          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-          echo "New upstream version: $NEW_VERSION"
-
-      - name: Update release files
-        if: steps.check_upstream.outputs.has_changes == 'true'
-        env:
-          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
-        run: |
-          set -euo pipefail
-          {
-            echo "## v${NEW_VERSION} - $(date +%Y-%m-%d) [Upstream Update]"
-            echo
-            echo "Synced with latest upstream changes from opencarwings repository."
-            echo
-            cat upstream_commits.txt
-            echo
-            echo
-          } > new_changes.md
-          cat new_changes.md opencarwings/CHANGELOG.md > temp.md
-          mv temp.md opencarwings/CHANGELOG.md
-          sed -i "s/^version: .*/version: \"$NEW_VERSION\"/" opencarwings/config.yaml
-
-      - name: Build and smoke-test amd64 image
-        if: steps.check_upstream.outputs.has_changes == 'true'
-        env:
-          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
-        run: |
-          set -euo pipefail
-          ruby .github/scripts/validate-metadata.rb
-          .github/scripts/build-smoke-test.sh "$NEW_VERSION"
-
-      - name: Stage verified release artifact
-        if: steps.check_upstream.outputs.has_changes == 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p release-artifact/opencarwings
-          cp opencarwings/config.yaml release-artifact/opencarwings/config.yaml
-          cp opencarwings/CHANGELOG.md release-artifact/opencarwings/CHANGELOG.md
-
-      - name: Upload verified release files
-        if: steps.check_upstream.outputs.has_changes == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: upstream-release-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-artifact/
-          if-no-files-found: error
-          retention-days: 1
-
-  publish:
-    needs: prepare
-    if: needs.prepare.outputs.has_changes == 'true'
-    runs-on: ubuntu-latest
-    environment: opencarwings-release
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout the exact tested main commit
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Download verified release files
-        uses: actions/download-artifact@v4
-        with:
-          name: upstream-release-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .
-
-      - name: Commit, tag, and atomically publish
-        env:
-          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
-          NEW_VERSION: ${{ needs.prepare.outputs.new_version }}
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$BASE_SHA"
-          git fetch origin main --tags
-          test "$(git rev-parse origin/main)" = "$BASE_SHA"
-          test "$(sed -nE 's/^version: "([^"]+)"$/\1/p' opencarwings/config.yaml)" = "$NEW_VERSION"
-          test "$(git diff --name-only | sort)" = $'opencarwings/CHANGELOG.md\nopencarwings/config.yaml'
-          git diff --check
-
-          TAG="v${NEW_VERSION}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            echo "Remote tag ${TAG} already exists; refusing to overwrite it" >&2
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add opencarwings/config.yaml opencarwings/CHANGELOG.md
-          git diff --cached --check
-          git diff --cached --quiet && { echo "No release changes to commit" >&2; exit 1; }
-          git commit -m "Upstream sync - v${NEW_VERSION}"
-          test "$(git rev-parse HEAD^)" = "$BASE_SHA"
-          git tag "$TAG"
-          git push --atomic origin HEAD:main "refs/tags/${TAG}"
-
-  recover-prepare:
-    if: inputs.recover_missing_tag != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      source_sha: ${{ steps.recovery.outputs.source_sha }}
-      tag: ${{ steps.recovery.outputs.tag }}
-      version: ${{ steps.recovery.outputs.version }}
+      mode: ${{ steps.candidate.outputs.mode }}
+      base_sha: ${{ steps.candidate.outputs.base_sha }}
+      has_changes: ${{ steps.candidate.outputs.has_changes }}
+      target_upstream: ${{ steps.candidate.outputs.target_upstream }}
+      new_version: ${{ steps.candidate.outputs.new_version }}
+      release_tag: ${{ steps.candidate.outputs.release_tag }}
+      release_sha: ${{ steps.candidate.outputs.release_sha }}
     steps:
       - name: Checkout main without publish credentials
         uses: actions/checkout@v4
@@ -246,67 +62,207 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify tag-only upstream recovery
-        id: recovery
+      - name: Test release preparation
+        run: python3 .github/scripts/test-prepare-upstream-release.py
+
+      - name: Prepare exact upstream candidate
+        id: candidate
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          TARGET_UPSTREAM: ${{ inputs.target_upstream }}
+          RECOVERY_TAG: ${{ inputs.recover_missing_tag }}
           DEV_VALIDATED: ${{ inputs.dev_validated }}
           TESTED_COMMIT: ${{ inputs.tested_commit }}
-          RECOVERY_TAG: ${{ inputs.recover_missing_tag }}
         run: |
           set -euo pipefail
-          test "$DEV_VALIDATED" = "true"
-          [[ "$TESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$RECOVERY_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-          test "$(git rev-parse HEAD)" = "$TESTED_COMMIT"
-          VERSION="${RECOVERY_TAG#v}"
-          test "$(sed -nE 's/^version: "([^"]+)"$/\1/p' opencarwings/config.yaml)" = "$VERSION"
-          test "$(git log -1 --pretty=%s)" = "Upstream sync - v${VERSION}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${RECOVERY_TAG}" >/dev/null 2>&1; then
-            echo "Remote tag already exists; refusing recovery" >&2
-            exit 1
+          test -z "$(git status --porcelain)"
+          if [ -n "$RECOVERY_TAG" ]; then
+            test "$EVENT_NAME" = workflow_dispatch
+            test -z "$TARGET_UPSTREAM"
+            python3 .github/scripts/prepare-upstream-release.py recover \
+              --tag "$RECOVERY_TAG" --tested-commit "$TESTED_COMMIT" --dev-validated "$DEV_VALIDATED"
+          else
+            python3 .github/scripts/prepare-upstream-release.py prepare \
+              --event "$EVENT_NAME" --target "$TARGET_UPSTREAM"
           fi
-          echo "source_sha=$TESTED_COMMIT" >> "$GITHUB_OUTPUT"
-          echo "tag=$RECOVERY_TAG" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Rebuild and smoke-test exact untagged release
+      - name: Build and smoke-test the exact candidate
+        if: steps.candidate.outputs.has_changes == 'true' || steps.candidate.outputs.mode == 'recover'
         env:
-          VERSION: ${{ steps.recovery.outputs.version }}
+          VERSION: ${{ steps.candidate.outputs.new_version }}
         run: |
           set -euo pipefail
           ruby .github/scripts/validate-metadata.rb
           .github/scripts/build-smoke-test.sh "$VERSION"
 
+      - name: Stage only verified release files
+        if: steps.candidate.outputs.has_changes == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifact/opencarwings
+          cp opencarwings/config.yaml opencarwings/CHANGELOG.md opencarwings/.upstream_sync release-artifact/opencarwings/
+
+      - name: Upload verified files including the hidden upstream pin
+        if: steps.candidate.outputs.has_changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-artifact/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: prepare
+    if: needs.prepare.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_sha: ${{ steps.publish.outputs.release_sha }}
+    steps:
+      - name: Checkout the tested app source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          fetch-depth: 0
+
+      - name: Download verified release files
+        uses: actions/download-artifact@v4
+        with:
+          name: upstream-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .
+
+      - name: Verify, commit, tag and publish atomically
+        id: publish
+        env:
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+          VERSION: ${{ needs.prepare.outputs.new_version }}
+          TARGET_UPSTREAM: ${{ needs.prepare.outputs.target_upstream }}
+          TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          test "$TAG" = "v$VERSION"
+          python3 .github/scripts/prepare-upstream-release.py verify --base "$BASE_SHA" --version "$VERSION" --target "$TARGET_UPSTREAM"
+          git diff --check
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag already exists; refusing overwrite" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add opencarwings/config.yaml opencarwings/CHANGELOG.md opencarwings/.upstream_sync
+          git commit -m "Upstream sync - $TAG"
+          test "$(git rev-parse HEAD^)" = "$BASE_SHA"
+          git tag "$TAG"
+          git push --atomic origin HEAD:main "refs/tags/$TAG"
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  keepalive:
+    needs: prepare
+    if: needs.prepare.outputs.mode == 'normal' && needs.prepare.outputs.has_changes == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the unchanged app source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          fetch-depth: 0
+
+      - name: Keep scheduled checks active during quiet upstream periods
+        env:
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          test -z "$(git status --porcelain)"
+          LAST_ACTIVITY=$(git log -1 --format=%ct)
+          if [ "$(( $(date +%s) - LAST_ACTIVITY ))" -lt 2592000 ]; then
+            echo "Recent repository activity already keeps scheduled checks active"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "Keep upstream update checks active"
+          test "$(git rev-parse HEAD^)" = "$BASE_SHA"
+          test -z "$(git diff-tree --no-commit-id --name-only -r HEAD)"
+          git push origin HEAD:main
+
   recover-publish:
-    needs: recover-prepare
-    if: needs.recover-prepare.result == 'success'
+    needs: prepare
+    if: needs.prepare.outputs.mode == 'recover'
     runs-on: ubuntu-latest
     environment: opencarwings-release
     permissions:
       contents: write
+    outputs:
+      release_sha: ${{ steps.publish.outputs.release_sha }}
     steps:
-      - name: Checkout exact untagged release
+      - name: Checkout the verified untagged release
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.prepare.outputs.base_sha }}
           fetch-depth: 0
 
-      - name: Publish only the missing tag
+      - name: Recover only the missing tag
+        id: publish
         env:
-          SOURCE_SHA: ${{ needs.recover-prepare.outputs.source_sha }}
-          TAG: ${{ needs.recover-prepare.outputs.tag }}
-          VERSION: ${{ needs.recover-prepare.outputs.version }}
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+          TAG: ${{ needs.prepare.outputs.release_tag }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           git fetch origin main --tags
-          test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
-          test "$(sed -nE 's/^version: "([^"]+)"$/\1/p' opencarwings/config.yaml)" = "$VERSION"
-          test "$(git log -1 --pretty=%s)" = "Upstream sync - v${VERSION}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            echo "Remote tag already exists; refusing recovery" >&2
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          test -z "$(git status --porcelain)"
+          python3 .github/scripts/prepare-upstream-release.py recover \
+            --tag "$TAG" --tested-commit "$BASE_SHA" --dev-validated true
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag already exists; refusing recovery" >&2
             exit 1
           fi
-          git tag "$TAG" "$SOURCE_SHA"
-          git push origin "refs/tags/${TAG}"
+          git tag "$TAG" "$BASE_SHA"
+          git push origin "refs/tags/$TAG"
+          echo "release_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+
+  release-notes:
+    needs: [prepare, publish, recover-publish]
+    if: >-
+      always() && needs.prepare.result == 'success' &&
+      (needs.publish.result == 'success' || needs.recover-publish.result == 'success' ||
+      (needs.publish.result == 'skipped' && needs.recover-publish.result == 'skipped'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout trusted release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create or repair release notes without another version bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.release_tag }}
+          EXPECTED_SHA: ${{ needs.publish.outputs.release_sha || needs.recover-publish.outputs.release_sha || needs.prepare.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git fetch origin tag "$TAG"
+          test "$(git rev-parse "${TAG}^{commit}")" = "$EXPECTED_SHA"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release notes already exist for $TAG"
+          else
+            python3 .github/scripts/prepare-upstream-release.py notes --tag "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release create "$TAG" --verify-tag --title "OpenCarwings HA app $TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi

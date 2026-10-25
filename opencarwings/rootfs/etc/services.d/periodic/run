@@ -5,6 +5,13 @@
 # shellcheck source=/etc/cont-init.d/00-log-fix.sh
 source /etc/cont-init.d/00-log-fix.sh
 
+# A dev database may contain real vehicle timers and SMS credentials.
+# Keep this service alive without running jobs during isolated validation.
+if [ "$(bashio::config 'periodic_tasks_enabled' 'true')" != "true" ]; then
+  bashio::log.info "Periodic tasks are disabled; scheduled vehicle commands will not run."
+  exec sleep infinity
+fi
+
 cd /opt/opencarwings || exit 1
 
 # Wait for Django setup to complete
@@ -51,6 +58,15 @@ while true; do
   FLUSH_OUT=$(python3 manage.py flushexpiredtokens 2>&1 | grep -vE "Starting token flush|No expired tokens found|Using selector: EpollSelector") || true
   if [ -n "$FLUSH_OUT" ] && [ "$FLUSH_OUT" != "" ]; then
     bashio::log.info "flushexpiredtokens: ${FLUSH_OUT}"
+  fi
+
+  # Upstream account transfers expire independently of API tokens.
+  TRANSFER_OUT=$(python3 manage.py flushexpiredtransfers 2>&1) || {
+    bashio::log.error "flushexpiredtransfers: ${TRANSFER_OUT}"
+    TRANSFER_OUT=""
+  }
+  if [ -n "$TRANSFER_OUT" ]; then
+    bashio::log.info "flushexpiredtransfers: ${TRANSFER_OUT}"
   fi
 
   # Heartbeat log every HEARTBEAT_INTERVAL cycles

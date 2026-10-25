@@ -32,6 +32,7 @@ RUN apk add --no-cache \
     netcat-openbsd \
     pngquant \
     dos2unix \
+    gettext \
     && ln -sf /usr/bin/libressl-openssl /usr/local/bin/openssl \
     && printf '%s\n' \
         '[req]' \
@@ -70,6 +71,11 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages --only-binary=
     whitenoise djangorestframework djangorestframework-simplejwt \
     django-mathfilters drf-yasg \
     && python3 -m pip check
+
+# Upstream ships translation sources; compile them without a running database.
+RUN cp carwings/settings.example.py carwings/settings.py \
+    && REDIS_HOST="" python3 manage.py compilemessages \
+    && rm carwings/settings.py
 
 # Install FRP client binary (frpc) for optional VPS relay mode.
 ARG FRP_VERSION=0.64.0
