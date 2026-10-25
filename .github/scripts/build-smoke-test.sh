@@ -44,6 +44,8 @@ docker run --rm \
     --platform linux/amd64 \
     --entrypoint /bin/sh \
     --env "EXPECTED_UPSTREAM=${upstream_commit}" \
+    --volume "${repo_root}/.github/scripts:/wrapper/.github/scripts:ro" \
+    --volume "${repo_root}/opencarwings:/wrapper/opencarwings:ro" \
     "$image" \
     -ec '
         test "$(git -C /opt/opencarwings rev-parse HEAD)" = "$EXPECTED_UPSTREAM"
@@ -54,6 +56,7 @@ docker run --rm \
         python3 -c "import pngquant, psycopg2"
         python3 -m pip check
         cd /opt/opencarwings
+        python3 /wrapper/.github/scripts/test-startup-patches.py /opt/opencarwings --wrapper-root /wrapper --redis-idle
         cp carwings/settings.docker.py carwings/settings.py
         python3 manage.py check
         for command in bashio curl dos2unix frpc git gosu nc nginx openssl pg_ctl postgres psql python3 redis-cli redis-server timeout; do

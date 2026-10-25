@@ -1,5 +1,6 @@
 #!/command/with-contenv bashio
 # shellcheck shell=bash
+set -e
 source /etc/cont-init.d/00-log-fix.sh
 
 cd /opt/opencarwings
@@ -108,7 +109,8 @@ if os.path.exists(cp_path):
     with open(cp_path, 'r') as f:
         content = f.read()
     
-    if 'if not settings.OPENCHARGEMAP_API_KEY' in content:
+    if ('if not settings.OPENCHARGEMAP_API_KEY' in content
+            and 'if not settings.ITERNIO_API_KEY' in content):
         print("[DEBUG] CP application already patched.")
     else:
         print("[INFO] Patching CP application for crash prevention...")
@@ -158,7 +160,7 @@ if os.path.exists(cp_path):
                 'types': 'j1772,type2,chademo',
                 'sort_by_distance': 'true',
                 'sort_by_power': 'false',
-                'limit': '100'
+                'limit': '255'
             }, headers={"User-Agent": "OpenCARWINGS", "Authorization": f"APIKEY {settings.ITERNIO_API_KEY}"})
             try:
                 chargers = chargers.json().get("result", [])
@@ -178,7 +180,7 @@ if os.path.exists(cp_path):
                         'types': 'j1772,type2,chademo',
                         'sort_by_distance': 'true',
                         'sort_by_power': 'false',
-                        'limit': '100'
+                        'limit': '255'
                     }, headers={"User-Agent": "OpenCARWINGS", "Authorization": f"APIKEY {settings.ITERNIO_API_KEY.strip()}"})
                     if chargers.status_code != 200:
                         logger.error("Iternio API returned status %d", chargers.status_code)
@@ -189,8 +191,15 @@ if os.path.exists(cp_path):
                     logger.error("Failed to fetch iternio stations: %s", str(e))
                     chargers = []"""
 
-        content = content.replace(old_ocm_block, new_ocm_block)
-        content = content.replace(old_iternio_block, new_iternio_block)
+        for old, new, name in (
+            (old_ocm_block, new_ocm_block, 'OpenChargeMap'),
+            (old_iternio_block, new_iternio_block, 'Iternio'),
+        ):
+            if old in content:
+                content = content.replace(old, new)
+            elif new not in content:
+                raise RuntimeError(f'{name} compatibility patch does not match upstream')
+        compile(content, cp_path, 'exec')
         
         with open(cp_path, 'w') as f:
             f.write(content)
@@ -216,13 +225,7 @@ else
     exit 1
 fi
 
-# Collect static files
-bashio::log.info "Collecting static files..."
-if python manage.py collectstatic --noinput --clear 2>&1; then
-    bashio::log.info "Static files collected successfully"
-else
-    bashio::log.error "Static file collection failed; refusing to start services"
-    exit 1
-fi
+# Static collection runs in 05 after the final storage and middleware settings.
+bashio::log.info "Static file collection deferred until runtime settings are patched"
 
 bashio::log.info "Django setup completed"

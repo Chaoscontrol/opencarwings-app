@@ -1,3 +1,16 @@
+## v0.0.25 - 2026-10-25 [Upstream Update Candidate]
+
+- Advance upstream from `797e6dc` to `bfe2ad2` (238 commits; upstream version 1.1).
+- Add upstream FICOSA support, vehicle-health features, optional 2FA/command PINs,
+  account transfers, SMS providers, navigation improvements and translations.
+- Update startup patches for the new CRM parser, Iternio request and logger names.
+- Configure current Django static storage and compile translations.
+- Add expired-transfer cleanup and an option to pause periodic jobs during dev tests.
+- Preserve HTTP Host ports for dev login on isolated ports.
+- Fix idle notification reconnect loops caused by redis-py 8's default timeout.
+- [Detailed features and validation notes](https://github.com/Chaoscontrol/opencarwings-app/blob/main/docs/upstream-catchup-2026-10.md)
+- [Complete upstream comparison](https://github.com/developerfromjokela/opencarwings/compare/797e6dc0f707169d521841ce400b19bad027e7bd...bfe2ad23a5e973c0a5313b711af4852394aea9a0)
+
 ## v0.0.24-3 - 2026-07-18 [Addon Patch]
 
 - Harden dev deployment and release workflow

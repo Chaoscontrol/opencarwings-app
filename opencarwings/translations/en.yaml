@@ -5,6 +5,9 @@ configuration:
   log_level:
     name: Log level
     description: Logging verbosity for add-on services.
+  periodic_tasks_enabled:
+    name: Enable periodic tasks
+    description: Run vehicle refreshes, timers and cleanup. Disable for isolated development testing to prevent scheduled vehicle commands.
   connection_mode:
     name: Connection mode
     description: Choose local port forwarding or VPS relay mode via FRP for TCU raw TCP 55230 traffic.

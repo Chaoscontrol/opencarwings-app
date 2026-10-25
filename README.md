@@ -91,16 +91,31 @@ After a long maintenance gap:
 4. Stop dev, deploy once, refresh the local store, and rebuild dev.
 5. Verify dev on isolated ports; use an exclusive cutover only for real TCU/FRP testing.
 6. Commit and push the tested source.
-7. Manually run the appropriate release workflow, confirm `dev_validated`, and enter the exact tested commit SHA.
+7. Merge the tested upstream pin to `main`; the upstream workflow releases that exact pin after its build gate passes. For app-only fixes, manually run the patch workflow with `dev_validated` and the tested app commit SHA.
 8. Back up and manually update the official app only after the release build passes.
 
-Configure the GitHub environment `opencarwings-release` with required reviewers;
-the write-capable publish job targets that environment after the read-only image
-gate succeeds.
+Configure the GitHub environment `opencarwings-release` with required reviewers
+for manual app-only patch releases and tag recovery. Normal automatic upstream
+releases publish after the read-only build gate without an environment approval.
 
 Branch and pull-request CI builds the full amd64 image and runs smoke assertions
-without publishing. Upstream and add-on patch releases are manual-only. Upstream
-base releases use `0.0.X`; add-on-only fixes use `0.0.X-N`.
+without publishing. Upstream updates check `main` daily at 03:17 UTC and publish
+only when the upstream commit changes and all checks pass. A push to app `main`
+releases its checked-in pin; a scheduled run follows upstream `main`. Manual
+dispatch supports an explicit upstream SHA. App-only fixes remain manual.
+
+All new app releases use one increasing counter: `0.0.25`, `0.0.26`, `0.0.27`,
+whether the change is upstream code or app packaging. Historical `-N` versions
+remain valid inputs. Release notes record the upstream version, full SHA and
+comparison link, independently of upstream's tags. Unchanged upstream produces
+no version bump. Builds always use the recorded SHA, rather than a moving branch.
+
+The workflow publishes the version, tag and GitHub Release. Installing it in Home
+Assistant remains a separate action controlled by the app's automatic-update
+setting. After 30 days without another main-branch commit, an unchanged-upstream
+check makes an empty keepalive commit so GitHub's 60-day inactivity rule does not
+disable the schedule. This changes no app files, versions or tags. The workflow also supports
+manual execution and repairs missing GitHub Release notes without another bump.
 
 The ignored `upstream-opencarwings/` clone is disposable reference material,
 never a source or release authority.
@@ -108,12 +123,30 @@ never a source or release authority.
 The backup, one-time data consolidation, validation, and rollback procedure is
 documented in [`docs/maintenance.md`](docs/maintenance.md).
 
+From the Codex Home Assistant App's Linux shell, the equivalent controlled
+deployment is:
+
+```bash
+python3 scripts/deploy-opencarwings-dev.py --confirm-dev-stopped --allow-dirty --dry-run
+python3 scripts/deploy-opencarwings-dev.py --confirm-dev-stopped --allow-dirty
+```
+
+Verify Supervisor reports dev stopped first. `--allow-dirty` explicitly accepts
+the listed uncommitted app changes. The helper verifies the complete deployed
+tree and retains the previous source in a hidden dated directory. It does not
+rebuild/start the app or alter its options. Pause `periodic_tasks_enabled` for
+initial dev testing: different host ports do not prevent scheduled SMS commands.
+
+The [July–October catch-up notes](docs/upstream-catchup-2026-10.md) describe the
+new upstream features and the dev-first validation requirements.
+
 ## App Configuration
 
 | Option | Description | Default |
 | --- | --- | --- |
 | `timezone` | Local timezone | `UTC` |
 | `log_level` | Log verbosity | `info` |
+| `periodic_tasks_enabled` | Run vehicle refreshes, timers and cleanup; disable for isolated dev validation | `true` |
 | `connection_mode` | `local` or `vps_frp` | `local` |
 | `http_domain` | Public domain for UI/API/webhook | `""` |
 | `tcu_domain` | Public domain for TCU raw TCP `55230` | `""` |
