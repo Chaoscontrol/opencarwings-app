@@ -1,3 +1,17 @@
+## v0.0.26 - 2026-10-26 [Upstream Update]
+
+Upstream source: [`1.1 / f05e9d2179dd924e2b2ed945081d93a171d0eefa`](https://github.com/developerfromjokela/opencarwings/commit/f05e9d2179dd924e2b2ed945081d93a171d0eefa).
+Comparison: [bfe2ad2...f05e9d2](https://github.com/developerfromjokela/opencarwings/compare/bfe2ad23a5e973c0a5313b711af4852394aea9a0...f05e9d2179dd924e2b2ed945081d93a171d0eefa).
+
+### Upstream commits
+
+- Fix value conversions (f05e9d2)
+- Remove fields (8478e3f)
+- Merge pull request #96 from developerfromjokela/issue-60 (6c2bd7c)
+- Remove unused json import (962f19b)
+- Implement API for probe data (9d006db)
+- Add CRMLatest and CRMLifetime API (24eb352)
+
 ## v0.0.25 - 2026-10-25 [Upstream Update]
 
 - Advance upstream from `797e6dc` to `bfe2ad2` (238 commits; upstream version 1.1).
