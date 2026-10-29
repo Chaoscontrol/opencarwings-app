@@ -1,3 +1,20 @@
+## v0.0.27 - 2026-10-29 [Upstream Update]
+
+Upstream source: [`1.1 / 93adc169f6ea6b483b696491c0220f94d303d7ea`](https://github.com/developerfromjokela/opencarwings/commit/93adc169f6ea6b483b696491c0220f94d303d7ea).
+Comparison: [f05e9d2...93adc16](https://github.com/developerfromjokela/opencarwings/compare/f05e9d2179dd924e2b2ed945081d93a171d0eefa...93adc169f6ea6b483b696491c0220f94d303d7ea).
+
+### Upstream commits
+
+- Merge pull request #99 from developerfromjokela/dependabot/pip/pycryptodome-approx-eq-4.2.0 (93adc16)
+- Merge pull request #97 from developerfromjokela/dependabot/pip/asgiref-approx-eq-3.13.0 (3731b47)
+- Merge pull request #94 from developerfromjokela/dependabot/npm_and_yarn/docs/undici-8.12.3 (32f490d)
+- Merge pull request #100 from tdaroczi/codex/location-mobile-button-layout (69ca1a2)
+- Fix streaming in custom channels (eefa359)
+- Keep the walking-directions button intact on mobile (643a814)
+- Update pycryptodome requirement from ~=4.1.0 to ~=4.2.0 (e2c53d5)
+- Update asgiref requirement from ~=3.12.1 to ~=3.13.0 (a930aed)
+- Bump undici from 8.11.2 to 8.12.3 in /docs (898f00a)
+
 ## v0.0.26 - 2026-10-26 [Upstream Update]
 
 Upstream source: [`1.1 / f05e9d2179dd924e2b2ed945081d93a171d0eefa`](https://github.com/developerfromjokela/opencarwings/commit/f05e9d2179dd924e2b2ed945081d93a171d0eefa).
