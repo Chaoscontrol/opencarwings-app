@@ -1,3 +1,13 @@
+## v0.0.28 - 2026-10-30 [Upstream Update]
+
+Upstream source: [`1.1 / e06cd6ac8d3562e52bc653bafa7629ea45c1a9ab`](https://github.com/developerfromjokela/opencarwings/commit/e06cd6ac8d3562e52bc653bafa7629ea45c1a9ab).
+Comparison: [93adc16...e06cd6a](https://github.com/developerfromjokela/opencarwings/compare/93adc169f6ea6b483b696491c0220f94d303d7ea...e06cd6ac8d3562e52bc653bafa7629ea45c1a9ab).
+
+### Upstream commits
+
+- Merge remote-tracking branch 'origin/main' (e06cd6a)
+- Fix streaming in custom channels again ;) (84a2d6c)
+
 ## v0.0.27 - 2026-10-29 [Upstream Update]
 
 Upstream source: [`1.1 / 93adc169f6ea6b483b696491c0220f94d303d7ea`](https://github.com/developerfromjokela/opencarwings/commit/93adc169f6ea6b483b696491c0220f94d303d7ea).
