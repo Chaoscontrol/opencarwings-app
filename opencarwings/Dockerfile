@@ -62,15 +62,21 @@ RUN test "$(wc -l < /tmp/upstream_sync_marker)" -eq 1 \
     && git -C opencarwings checkout --detach "${UPSTREAM_COMMIT}" \
     && test "$(git -C opencarwings rev-parse HEAD)" = "${UPSTREAM_COMMIT}"
 
-# Install Python dependencies
+# Install Python dependencies. Twisted 26.10 (now required by upstream) raises
+# zope.interface's minimum to 8, but the Alpine/musllinux indexes do not expose
+# a compatible binary wheel for that package. Build just that dependency from
+# its source distribution; keep the binary-only policy for every other package.
 WORKDIR /opt/opencarwings
-RUN python3 -m pip install --no-cache-dir --break-system-packages --only-binary=:all: \
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+        --no-binary=zope-interface --no-deps 'zope-interface>=8' \
+    && python3 -m pip install --no-cache-dir --break-system-packages --only-binary=:all: \
     -r requirements.txt psycopg2-binary \
     daphne channels channels-redis \
     django-crispy-forms crispy-tailwind \
     whitenoise djangorestframework djangorestframework-simplejwt \
     django-mathfilters drf-yasg \
-    && python3 -m pip check
+    && python3 -m pip check \
+    && python3 -c "from importlib.metadata import version; assert int(version('zope.interface').split('.', 1)[0]) >= 8"
 
 # Upstream ships translation sources; compile them without a running database.
 RUN cp carwings/settings.example.py carwings/settings.py \
