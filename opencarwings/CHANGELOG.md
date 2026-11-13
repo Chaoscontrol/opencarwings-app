@@ -1,3 +1,20 @@
+## v0.0.29 - 2026-11-13 [Upstream Update]
+
+Upstream source: [`1.1 / 53a8b3a50d603e19124f0a7efc9844007900e375`](https://github.com/developerfromjokela/opencarwings/commit/53a8b3a50d603e19124f0a7efc9844007900e375).
+Comparison: [e06cd6a...53a8b3a](https://github.com/developerfromjokela/opencarwings/compare/e06cd6ac8d3562e52bc653bafa7629ea45c1a9ab...53a8b3a50d603e19124f0a7efc9844007900e375).
+
+### Upstream commits
+
+- Shorten config name (53a8b3a)
+- Merge remote-tracking branch 'origin/main' (9a08cd3)
+- Add TSP Server Settings (f85970a)
+- Merge pull request #103 from developerfromjokela/dependabot/pip/twisted-approx-eq-26.10.0 (11b5e23)
+- Merge pull request #105 from developerfromjokela/dependabot/pip/pycryptodome-approx-eq-4.3.0 (5b67075)
+- Merge pull request #106 from developerfromjokela/dependabot/pip/django-approx-eq-6.1.3 (13971a5)
+- Update django requirement from ~=6.1.2 to ~=6.1.3 (23dcf94)
+- Update pycryptodome requirement from ~=4.2.0 to ~=4.3.0 (5eb0da6)
+- Update twisted requirement from ~=26.4.0 to ~=26.10.0 (45a3d36)
+
 ## v0.0.28 - 2026-10-30 [Upstream Update]
 
 Upstream source: [`1.1 / e06cd6ac8d3562e52bc653bafa7629ea45c1a9ab`](https://github.com/developerfromjokela/opencarwings/commit/e06cd6ac8d3562e52bc653bafa7629ea45c1a9ab).
