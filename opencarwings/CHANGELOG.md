@@ -1,3 +1,17 @@
+## v0.0.30 - 2026-11-17 [Upstream Update]
+
+Upstream source: [`1.1 / 3df36d9d3123a9873bc8e0f17ee306d884a98574`](https://github.com/developerfromjokela/opencarwings/commit/3df36d9d3123a9873bc8e0f17ee306d884a98574).
+Comparison: [53a8b3a...3df36d9](https://github.com/developerfromjokela/opencarwings/compare/53a8b3a50d603e19124f0a7efc9844007900e375...3df36d9d3123a9873bc8e0f17ee306d884a98574).
+
+### Upstream commits
+
+- Fix small typo (3df36d9)
+- Include more fields for abrp data in ficosa2016.py (f9d0f09)
+- Fix3 (0d82c10)
+- Fix2 (331c6f1)
+- Fix (d9ab7a4)
+- Implement ABRP integration, timer retries for timeout and purging old historical data (3f7849a)
+
 ## v0.0.29 - 2026-11-13 [Upstream Update]
 
 Upstream source: [`1.1 / 53a8b3a50d603e19124f0a7efc9844007900e375`](https://github.com/developerfromjokela/opencarwings/commit/53a8b3a50d603e19124f0a7efc9844007900e375).
