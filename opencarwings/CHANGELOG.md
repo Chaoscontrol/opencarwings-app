@@ -1,3 +1,12 @@
+## v0.0.31 - 2026-11-19 [Upstream Update]
+
+Upstream source: [`1.1 / f8b58cb4828cb59a715f78eab48664d5b39f7860`](https://github.com/developerfromjokela/opencarwings/commit/f8b58cb4828cb59a715f78eab48664d5b39f7860).
+Comparison: [3df36d9...f8b58cb](https://github.com/developerfromjokela/opencarwings/compare/3df36d9d3123a9873bc8e0f17ee306d884a98574...f8b58cb4828cb59a715f78eab48664d5b39f7860).
+
+### Upstream commits
+
+- Remove extra argument (f8b58cb)
+
 ## v0.0.30 - 2026-11-17 [Upstream Update]
 
 Upstream source: [`1.1 / 3df36d9d3123a9873bc8e0f17ee306d884a98574`](https://github.com/developerfromjokela/opencarwings/commit/3df36d9d3123a9873bc8e0f17ee306d884a98574).
