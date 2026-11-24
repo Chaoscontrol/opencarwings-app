@@ -1,3 +1,12 @@
+## v0.0.32 - 2026-11-24 [Upstream Update]
+
+Upstream source: [`1.1 / 0076d44e265c40d642755598701d38c97313caf1`](https://github.com/developerfromjokela/opencarwings/commit/0076d44e265c40d642755598701d38c97313caf1).
+Comparison: [f8b58cb...0076d44](https://github.com/developerfromjokela/opencarwings/compare/f8b58cb4828cb59a715f78eab48664d5b39f7860...0076d44e265c40d642755598701d38c97313caf1).
+
+### Upstream commits
+
+- Cache pytz timezone list to prevent opening system files multiple times and skip system checks for cron jobs (0076d44)
+
 ## v0.0.31 - 2026-11-19 [Upstream Update]
 
 Upstream source: [`1.1 / f8b58cb4828cb59a715f78eab48664d5b39f7860`](https://github.com/developerfromjokela/opencarwings/commit/f8b58cb4828cb59a715f78eab48664d5b39f7860).
