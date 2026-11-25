@@ -1,3 +1,14 @@
+## v0.0.33 - 2026-11-25 [Upstream Update]
+
+Upstream source: [`1.1 / 83639abbbe1fd703758fca3215ee0e0c5910619c`](https://github.com/developerfromjokela/opencarwings/commit/83639abbbe1fd703758fca3215ee0e0c5910619c).
+Comparison: [0076d44...83639ab](https://github.com/developerfromjokela/opencarwings/compare/0076d44e265c40d642755598701d38c97313caf1...83639abbbe1fd703758fca3215ee0e0c5910619c).
+
+### Upstream commits
+
+- Add single cronjob runner to save django initialization resources from each task (83639ab)
+- Simplify query for abrp upload (120842e)
+- Performance improvements #112 (3ab960a)
+
 ## v0.0.32 - 2026-11-24 [Upstream Update]
 
 Upstream source: [`1.1 / 0076d44e265c40d642755598701d38c97313caf1`](https://github.com/developerfromjokela/opencarwings/commit/0076d44e265c40d642755598701d38c97313caf1).
