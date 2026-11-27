@@ -1,3 +1,12 @@
+## v0.0.34 - 2026-11-27 [Upstream Update]
+
+Upstream source: [`1.1 / d566f5fc01a028abbb20c5588428b9a34b333d1c`](https://github.com/developerfromjokela/opencarwings/commit/d566f5fc01a028abbb20c5588428b9a34b333d1c).
+Comparison: [83639ab...d566f5f](https://github.com/developerfromjokela/opencarwings/compare/83639abbbe1fd703758fca3215ee0e0c5910619c...d566f5fc01a028abbb20c5588428b9a34b333d1c).
+
+### Upstream commits
+
+- Update Discord server link in README.md (d566f5f)
+
 ## v0.0.33 - 2026-11-25 [Upstream Update]
 
 Upstream source: [`1.1 / 83639abbbe1fd703758fca3215ee0e0c5910619c`](https://github.com/developerfromjokela/opencarwings/commit/83639abbbe1fd703758fca3215ee0e0c5910619c).
